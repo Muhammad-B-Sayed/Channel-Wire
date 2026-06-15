@@ -1,0 +1,33 @@
+CC ?= cc
+CFLAGS ?= -std=c11 -Wall -Wextra -Wpedantic -Werror -O2 -g
+CPPFLAGS ?= -D_POSIX_C_SOURCE=200809L -Icore/include
+LDFLAGS ?=
+SANITIZE_FLAGS := -fsanitize=address,undefined -fno-omit-frame-pointer
+
+BUILD_DIR := build
+CORE_BIN := $(BUILD_DIR)/channelwire-server
+CORE_SRCS := core/src/server.c core/src/protocol.c
+CORE_OBJS := $(CORE_SRCS:%.c=$(BUILD_DIR)/%.o)
+
+.PHONY: all clean test sanitize
+
+all: $(CORE_BIN)
+
+$(CORE_BIN): $(CORE_OBJS)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+
+$(BUILD_DIR)/%.o: %.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c -o $@ $<
+
+sanitize: CFLAGS += $(SANITIZE_FLAGS)
+sanitize: clean all
+
+test: all
+	python3 tests/integration_test.py --server ./$(CORE_BIN)
+
+clean:
+	rm -rf $(BUILD_DIR)
+
+-include $(CORE_OBJS:.o=.d)
