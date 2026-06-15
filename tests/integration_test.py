@@ -76,6 +76,9 @@ def run(server: str) -> None:
         bob = connect_client(port, "bob")
         expect_text(alice, SYSTEM, b"bob connected")
 
+        send_frame(bob, LIST)
+        expect_text(bob, LIST_RESP, b"")
+
         send_frame(alice, JOIN, string_payload("general"))
         expect_text(alice, OK, b"joined general")
         send_frame(bob, JOIN, string_payload("general"))

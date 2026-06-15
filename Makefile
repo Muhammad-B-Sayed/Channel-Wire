@@ -9,7 +9,7 @@ CORE_BIN := $(BUILD_DIR)/channelwire-server
 CORE_SRCS := core/src/server.c core/src/protocol.c
 CORE_OBJS := $(CORE_SRCS:%.c=$(BUILD_DIR)/%.o)
 
-.PHONY: all clean test test-load sanitize docker-build docker-up docker-down
+.PHONY: all clean test test-load test-gateway sanitize docker-build docker-up docker-down
 
 all: $(CORE_BIN)
 
@@ -29,6 +29,9 @@ test: all
 
 test-load: all
 	python3 tests/load_test.py --server ./$(CORE_BIN)
+
+test-gateway: all
+	python3 tests/gateway_smoke_test.py --server ./$(CORE_BIN)
 
 docker-build:
 	docker compose build

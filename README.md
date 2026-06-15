@@ -5,14 +5,18 @@ ChannelWire is a production-style real-time messaging platform in progress. The 
 ## Current Architecture
 
 ```text
-TCP clients
+Browser / HTTP clients
    |
-   | ChannelWire binary protocol
+   | JSON over REST + WebSocket
+   v
+FastAPI gateway
+   |
+   | ChannelWire binary protocol over TCP
    v
 C messaging core
 ```
 
-Planned layers include a FastAPI WebSocket/REST gateway, PostgreSQL persistence, a React TypeScript frontend, Docker Compose, and broader load testing.
+Planned layers include PostgreSQL persistence, a React TypeScript frontend, and broader server monitoring.
 
 ## Binary Protocol
 
@@ -100,10 +104,48 @@ This runs the C core on `127.0.0.1:5555` through Docker port publishing. Stop it
 docker compose down
 ```
 
+The gateway is available at `http://127.0.0.1:8000` when Docker Compose is running.
+
+## Gateway
+
+Install the gateway dependencies:
+
+```sh
+python3 -m pip install -r gateway/requirements.txt
+```
+
+Start the C core:
+
+```sh
+make
+./build/channelwire-server 5555
+```
+
+Start the gateway:
+
+```sh
+uvicorn gateway.app.main:app --reload --port 8000
+```
+
+Create a development JWT:
+
+```sh
+curl -X POST http://127.0.0.1:8000/auth/dev-token \
+  -H 'content-type: application/json' \
+  -d '{"username":"alice"}'
+```
+
+Use the returned token with `GET /channels?token=...` or connect a WebSocket to `/ws?token=...`. WebSocket commands are JSON objects:
+
+```json
+{"type":"join","channel":"general"}
+{"type":"say","text":"hello from the browser side"}
+{"type":"dm","to":"bob","text":"private hello"}
+```
+
 ## Roadmap
 
 - Add durable message persistence through PostgreSQL or SQLite.
-- Add a FastAPI gateway exposing REST and browser WebSocket access.
-- Add JWT authentication and membership-aware channel APIs.
-- Add Docker Compose services for the gateway, database, and frontend.
+- Expand gateway REST coverage and membership-aware channel APIs.
+- Add Docker Compose services for the database and frontend.
 - Expand load tests for slow-reader backpressure behavior.

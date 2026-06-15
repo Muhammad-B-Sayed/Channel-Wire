@@ -245,6 +245,7 @@ static void send_who(client *c) {
     char payload[CW_MAX_PAYLOAD_SIZE];
     size_t used = 0;
 
+    payload[0] = '\0';
     for (size_t i = 0; i < CW_MAX_CLIENTS; i++) {
         if (clients[i].fd >= 0 && clients[i].registered) {
             int written = snprintf(payload + used,
@@ -267,6 +268,7 @@ static void send_list(client *c) {
     char payload[CW_MAX_PAYLOAD_SIZE];
     size_t used = 0;
 
+    payload[0] = '\0';
     for (size_t i = 0; i < channel_count; i++) {
         int written = snprintf(payload + used,
                                sizeof(payload) - used,

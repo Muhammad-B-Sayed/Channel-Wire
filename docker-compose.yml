@@ -12,3 +12,16 @@ services:
       timeout: 2s
       retries: 10
       start_period: 2s
+  gateway:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+    environment:
+      CHANNELWIRE_CORE_HOST: core
+      CHANNELWIRE_CORE_PORT: 5555
+      CHANNELWIRE_JWT_SECRET: dev-secret-change-me
+    ports:
+      - "8000:8000"
+    depends_on:
+      core:
+        condition: service_healthy
