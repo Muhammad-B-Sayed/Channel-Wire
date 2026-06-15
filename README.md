@@ -68,6 +68,14 @@ make
 
 The server currently binds to `127.0.0.1`.
 
+In another terminal, connect with the development CLI:
+
+```sh
+python3 tools/cw_client.py alice
+```
+
+Useful commands include `/join general`, plain text to send to the active channel, `/dm USER MESSAGE`, `/who`, `/list`, and `/quit`.
+
 ## Test
 
 ```sh
