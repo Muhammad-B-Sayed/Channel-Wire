@@ -1,0 +1,14 @@
+services:
+  core:
+    build:
+      context: .
+    environment:
+      CW_BIND_HOST: 0.0.0.0
+    ports:
+      - "5555:5555"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 5555"]
+      interval: 5s
+      timeout: 2s
+      retries: 10
+      start_period: 2s

@@ -570,7 +570,7 @@ static void write_to_client(client *c) {
     }
 }
 
-static int create_listener(int port) {
+static int create_listener(const char *bind_host, int port) {
     int fd;
     int opt = 1;
     struct sockaddr_in addr;
@@ -589,7 +589,7 @@ static int create_listener(int port) {
 
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    if (inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr) != 1) {
+    if (inet_pton(AF_INET, bind_host, &addr.sin_addr) != 1) {
         perror("inet_pton");
         close(fd);
         return -1;
@@ -665,10 +665,14 @@ static int parse_port(int argc, char **argv) {
 
 int main(int argc, char **argv) {
     int port = parse_port(argc, argv);
+    const char *bind_host = getenv("CW_BIND_HOST");
     int listener_fd;
 
     if (port < 0) {
         return 2;
+    }
+    if (bind_host == NULL || bind_host[0] == '\0') {
+        bind_host = "127.0.0.1";
     }
 
     signal(SIGINT, handle_signal);
@@ -676,12 +680,12 @@ int main(int argc, char **argv) {
     signal(SIGPIPE, SIG_IGN);
 
     init_clients();
-    listener_fd = create_listener(port);
+    listener_fd = create_listener(bind_host, port);
     if (listener_fd < 0) {
         return 1;
     }
 
-    log_line("channelwire server listening on 127.0.0.1:%d", port);
+    log_line("channelwire server listening on %s:%d", bind_host, port);
 
     while (running) {
         struct pollfd pfds[CW_MAX_CLIENTS + 1];

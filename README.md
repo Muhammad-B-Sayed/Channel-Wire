@@ -66,7 +66,7 @@ make
 ./build/channelwire-server 5555
 ```
 
-The server currently binds to `127.0.0.1`.
+The server binds to `127.0.0.1` by default. Set `CW_BIND_HOST=0.0.0.0` when running in a container or when you intentionally want to expose it beyond localhost.
 
 In another terminal, connect with the development CLI:
 
@@ -80,15 +80,30 @@ Useful commands include `/join general`, plain text to send to the active channe
 
 ```sh
 make test
+make test-load
 make sanitize
 ```
 
 `make test` starts the server on an ephemeral local port and verifies registration, channel chat, direct messages, user/channel listing, graceful quit, and malformed oversized frame handling.
+
+`make test-load` starts the server and runs a concurrent TCP client test against the binary protocol.
+
+## Docker
+
+```sh
+docker compose up --build
+```
+
+This runs the C core on `127.0.0.1:5555` through Docker port publishing. Stop it with:
+
+```sh
+docker compose down
+```
 
 ## Roadmap
 
 - Add durable message persistence through PostgreSQL or SQLite.
 - Add a FastAPI gateway exposing REST and browser WebSocket access.
 - Add JWT authentication and membership-aware channel APIs.
-- Add Docker Compose for the C core, gateway, database, and frontend.
-- Add load tests for concurrent clients and slow-reader backpressure behavior.
+- Add Docker Compose services for the gateway, database, and frontend.
+- Expand load tests for slow-reader backpressure behavior.

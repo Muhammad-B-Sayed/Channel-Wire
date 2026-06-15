@@ -13,7 +13,11 @@ jobs:
         run: make
       - name: Run integration test
         run: make test
+      - name: Run concurrent load test
+        run: make test-load
       - name: Sanitizer build
         run: make sanitize
       - name: Run sanitizer integration test
         run: make test
+      - name: Validate Docker image build
+        run: docker compose build
