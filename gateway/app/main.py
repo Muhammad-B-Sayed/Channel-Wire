@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import jwt
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -34,6 +34,15 @@ from channelwire_client import (  # noqa: E402
     decode_strings,
     encode_frame,
     string_payload,
+)
+from gateway.app.db import (  # noqa: E402
+    add_membership,
+    channel_history,
+    init_db,
+    save_channel_message,
+    save_dm,
+    session_scope,
+    upsert_user,
 )
 
 
@@ -72,6 +81,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def startup() -> None:
+    init_db()
 
 
 def create_token(username: str) -> str:
@@ -182,6 +196,9 @@ async def health() -> dict[str, Any]:
 
 @app.post("/auth/dev-token", response_model=TokenResponse)
 async def dev_token(request: TokenRequest) -> TokenResponse:
+    with session_scope() as db:
+        upsert_user(db, request.username)
+        db.commit()
     return TokenResponse(access_token=create_token(request.username))
 
 
@@ -200,6 +217,30 @@ async def channels(token: str) -> dict[str, Any]:
         await core_send(writer, QUIT)
         writer.close()
         await writer.wait_closed()
+
+
+@app.get("/history/{channel_name}")
+async def history(
+    channel_name: str,
+    token: str,
+    limit: int = Query(default=50, ge=1, le=200),
+) -> dict[str, Any]:
+    verify_token(token)
+    with session_scope() as db:
+        messages = channel_history(db, channel_name, limit)
+        return {
+            "type": "history",
+            "channel": channel_name,
+            "messages": [
+                {
+                    "id": message.id,
+                    "sender": message.sender,
+                    "text": message.body,
+                    "created_at": message.created_at.isoformat(),
+                }
+                for message in messages
+            ],
+        }
 
 
 @app.websocket("/ws")
@@ -222,16 +263,30 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     async def pump_core_to_ws() -> None:
         while True:
             msg_type, payload = await core_read(reader)
-            await websocket.send_json(gateway_event(msg_type, payload))
+            event = gateway_event(msg_type, payload)
+            if event["type"] == "chat" and event["sender"] == username:
+                with session_scope() as db:
+                    save_channel_message(db, event["channel"], event["sender"], event["text"])
+                    db.commit()
+            elif event["type"] == "dm":
+                with session_scope() as db:
+                    save_dm(db, event["sender"], username, event["text"])
+                    db.commit()
+            await websocket.send_json(event)
 
     async def pump_ws_to_core() -> None:
         while True:
             raw = await websocket.receive_text()
             try:
-                msg_type, payload = core_payload_for_command(json.loads(raw))
+                message = json.loads(raw)
+                msg_type, payload = core_payload_for_command(message)
             except (json.JSONDecodeError, ValueError) as exc:
                 await websocket.send_json({"type": "error", "message": str(exc)})
                 continue
+            if msg_type in (JOIN, SWITCH):
+                with session_scope() as db:
+                    add_membership(db, username, message["channel"])
+                    db.commit()
             await core_send(writer, msg_type, payload)
             if msg_type == QUIT:
                 return

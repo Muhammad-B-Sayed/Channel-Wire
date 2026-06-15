@@ -1,6 +1,6 @@
 # ChannelWire
 
-ChannelWire is a production-style real-time messaging platform in progress. The first milestone is a C11 TCP messaging core with non-blocking sockets, `poll()` multiplexing, a compact binary protocol, bounded outgoing queues, malformed-frame rejection, and integration tests.
+ChannelWire is a production-style real-time messaging platform in progress. It includes a C11 TCP messaging core with non-blocking sockets, `poll()` multiplexing, a compact binary protocol, bounded outgoing queues, malformed-frame rejection, a FastAPI WebSocket/REST gateway, and database-backed message history for gateway traffic.
 
 ## Current Architecture
 
@@ -14,9 +14,13 @@ FastAPI gateway
    | ChannelWire binary protocol over TCP
    v
 C messaging core
+   |
+   | gateway persistence path
+   v
+PostgreSQL
 ```
 
-Planned layers include PostgreSQL persistence, a React TypeScript frontend, and broader server monitoring.
+Planned layers include a React TypeScript frontend and broader server monitoring.
 
 ## Binary Protocol
 
@@ -104,7 +108,7 @@ This runs the C core on `127.0.0.1:5555` through Docker port publishing. Stop it
 docker compose down
 ```
 
-The gateway is available at `http://127.0.0.1:8000` when Docker Compose is running.
+The gateway is available at `http://127.0.0.1:8000` and PostgreSQL is published on `127.0.0.1:5432` when Docker Compose is running.
 
 ## Gateway
 
@@ -143,9 +147,15 @@ Use the returned token with `GET /channels?token=...` or connect a WebSocket to 
 {"type":"dm","to":"bob","text":"private hello"}
 ```
 
+Gateway WebSocket traffic is persisted through SQLAlchemy. Docker Compose uses PostgreSQL; local smoke tests use an isolated SQLite database. Retrieve channel history with:
+
+```sh
+curl 'http://127.0.0.1:8000/history/general?token=TOKEN'
+```
+
 ## Roadmap
 
-- Add durable message persistence through PostgreSQL or SQLite.
 - Expand gateway REST coverage and membership-aware channel APIs.
-- Add Docker Compose services for the database and frontend.
+- Add a React TypeScript frontend.
+- Add Docker Compose service for the frontend.
 - Expand load tests for slow-reader backpressure behavior.

@@ -1,4 +1,20 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: channelwire
+      POSTGRES_USER: channelwire
+      POSTGRES_PASSWORD: channelwire
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U channelwire -d channelwire"]
+      interval: 5s
+      timeout: 2s
+      retries: 10
+      start_period: 5s
   core:
     build:
       context: .
@@ -20,8 +36,14 @@ services:
       CHANNELWIRE_CORE_HOST: core
       CHANNELWIRE_CORE_PORT: 5555
       CHANNELWIRE_JWT_SECRET: dev-secret-change-me
+      CHANNELWIRE_DATABASE_URL: postgresql+psycopg://channelwire:channelwire@postgres:5432/channelwire
     ports:
       - "8000:8000"
     depends_on:
       core:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres-data:

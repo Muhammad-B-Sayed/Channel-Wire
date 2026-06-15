@@ -4,6 +4,7 @@ import os
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -39,36 +40,46 @@ def run(server: str) -> None:
     )
     try:
         wait_for_port(port)
-        os.environ["CHANNELWIRE_CORE_PORT"] = str(port)
-        os.environ["CHANNELWIRE_JWT_SECRET"] = "test-secret-with-at-least-32-bytes"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.environ["CHANNELWIRE_CORE_PORT"] = str(port)
+            os.environ["CHANNELWIRE_JWT_SECRET"] = "test-secret-with-at-least-32-bytes"
+            os.environ["CHANNELWIRE_DATABASE_URL"] = f"sqlite:///{tmpdir}/gateway-test.db"
 
-        from gateway.app.main import app
+            from gateway.app.main import app
 
-        with TestClient(app) as client:
-            health = client.get("/health")
-            assert health.status_code == 200
-            assert health.json()["core_port"] == port
+            with TestClient(app) as client:
+                health = client.get("/health")
+                assert health.status_code == 200
+                assert health.json()["core_port"] == port
 
-            token_resp = client.post("/auth/dev-token", json={"username": "webalice"})
-            assert token_resp.status_code == 200
-            token = token_resp.json()["access_token"]
+                token_resp = client.post("/auth/dev-token", json={"username": "webalice"})
+                assert token_resp.status_code == 200
+                token = token_resp.json()["access_token"]
 
-            channels = client.get("/channels", params={"token": token})
-            assert channels.status_code == 200
-            assert channels.json() == {"type": "channels", "channels": []}
+                channels = client.get("/channels", params={"token": token})
+                assert channels.status_code == 200
+                assert channels.json() == {"type": "channels", "channels": []}
 
-            with client.websocket_connect(f"/ws?token={token}") as ws:
-                assert ws.receive_json() == {"type": "ready", "username": "webalice"}
-                ws.send_json({"type": "join", "channel": "general"})
-                assert ws.receive_json() == {"type": "ok", "message": "joined general"}
-                ws.send_json({"type": "say", "text": "hello from websocket"})
-                assert ws.receive_json() == {
-                    "type": "chat",
-                    "channel": "general",
-                    "sender": "webalice",
-                    "text": "hello from websocket",
-                }
-                ws.send_json({"type": "quit"})
+                with client.websocket_connect(f"/ws?token={token}") as ws:
+                    assert ws.receive_json() == {"type": "ready", "username": "webalice"}
+                    ws.send_json({"type": "join", "channel": "general"})
+                    assert ws.receive_json() == {"type": "ok", "message": "joined general"}
+                    ws.send_json({"type": "say", "text": "hello from websocket"})
+                    assert ws.receive_json() == {
+                        "type": "chat",
+                        "channel": "general",
+                        "sender": "webalice",
+                        "text": "hello from websocket",
+                    }
+                    ws.send_json({"type": "quit"})
+
+                history = client.get("/history/general", params={"token": token})
+                assert history.status_code == 200
+                body = history.json()
+                assert body["type"] == "history"
+                assert body["channel"] == "general"
+                assert body["messages"][-1]["sender"] == "webalice"
+                assert body["messages"][-1]["text"] == "hello from websocket"
     finally:
         proc.terminate()
         try:
