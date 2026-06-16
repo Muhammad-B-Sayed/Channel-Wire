@@ -1,7 +1,7 @@
 import os
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, create_engine, func, select
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, and_, create_engine, func, or_, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 
@@ -99,6 +99,25 @@ def channel_history(db: Session, channel_name: str, limit: int) -> list[Message]
         db.execute(
             select(Message)
             .where(Message.kind == "channel", Message.channel_name == channel_name)
+            .order_by(Message.id.desc())
+            .limit(limit)
+        )
+        .scalars()
+        .all()
+    )[::-1]
+
+
+def direct_history(db: Session, username: str, other_username: str, limit: int) -> list[Message]:
+    return list(
+        db.execute(
+            select(Message)
+            .where(
+                Message.kind == "dm",
+                or_(
+                    and_(Message.sender == username, Message.recipient == other_username),
+                    and_(Message.sender == other_username, Message.recipient == username),
+                ),
+            )
             .order_by(Message.id.desc())
             .limit(limit)
         )

@@ -13,6 +13,14 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
+def receive_type(ws, expected_type: str) -> dict:
+    for _ in range(10):
+        event = ws.receive_json()
+        if event["type"] == expected_type:
+            return event
+    raise AssertionError(f"did not receive event type {expected_type}")
+
+
 def pick_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
@@ -96,6 +104,36 @@ def run(server: str) -> None:
                 assert core_stats_body["type"] == "core_stats"
                 assert core_stats_body["total_connections"] >= 2
                 assert core_stats_body["channel_messages"] >= 1
+
+                bob_resp = client.post("/auth/dev-token", json={"username": "webbob"})
+                assert bob_resp.status_code == 200
+                bob_token = bob_resp.json()["access_token"]
+
+                with client.websocket_connect(f"/ws?token={token}") as alice_ws:
+                    assert alice_ws.receive_json() == {"type": "ready", "username": "webalice"}
+                    with client.websocket_connect(f"/ws?token={bob_token}") as bob_ws:
+                        assert bob_ws.receive_json() == {"type": "ready", "username": "webbob"}
+                        alice_ws.send_json({"type": "dm", "to": "webbob", "text": "private browser hello"})
+                        assert receive_type(alice_ws, "ok") == {
+                            "type": "ok",
+                            "message": "direct message sent",
+                        }
+                        assert receive_type(bob_ws, "dm") == {
+                            "type": "dm",
+                            "sender": "webalice",
+                            "text": "private browser hello",
+                        }
+                        alice_ws.send_json({"type": "quit"})
+                        bob_ws.send_json({"type": "quit"})
+
+                dm_history = client.get("/history/dm/webalice", params={"token": bob_token})
+                assert dm_history.status_code == 200
+                dm_body = dm_history.json()
+                assert dm_body["type"] == "dm_history"
+                assert dm_body["with"] == "webalice"
+                assert dm_body["messages"][-1]["sender"] == "webalice"
+                assert dm_body["messages"][-1]["recipient"] == "webbob"
+                assert dm_body["messages"][-1]["text"] == "private browser hello"
     finally:
         proc.terminate()
         try:

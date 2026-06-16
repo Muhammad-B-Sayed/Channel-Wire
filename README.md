@@ -157,6 +157,12 @@ Gateway WebSocket traffic is persisted through SQLAlchemy. Docker Compose uses P
 curl 'http://127.0.0.1:8000/history/general?token=TOKEN'
 ```
 
+Retrieve direct-message history with another user:
+
+```sh
+curl 'http://127.0.0.1:8000/history/dm/bob?token=TOKEN'
+```
+
 Retrieve platform counters for basic monitoring with:
 
 ```sh

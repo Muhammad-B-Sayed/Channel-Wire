@@ -222,6 +222,27 @@ function App() {
     );
   }
 
+  async function loadDirectHistory() {
+    if (!token || !dmTo) {
+      setError("Choose a DM recipient after connecting");
+      return;
+    }
+    const response = await fetch(`${gatewayHttp}/history/dm/${encodeURIComponent(dmTo)}?token=${encodeURIComponent(token)}`);
+    if (!response.ok) {
+      setError(await response.text());
+      return;
+    }
+    const body = await response.json();
+    setMessages(
+      body.messages.map((item: { id: number; sender: string; text: string }) => ({
+        id: item.id,
+        kind: "dm",
+        sender: item.sender,
+        text: item.text
+      }))
+    );
+  }
+
   useEffect(() => {
     refreshHealth().catch((exc: Error) => setError(exc.message));
     return () => socketRef.current?.close();
@@ -373,6 +394,10 @@ function App() {
                 <textarea value={dmText} onChange={(event) => setDmText(event.target.value)} />
               </label>
               <button>Send DM</button>
+              <button type="button" className="iconButton" onClick={loadDirectHistory}>
+                <History size={16} />
+                History
+              </button>
             </form>
           </div>
           <div className="panel metricGrid">

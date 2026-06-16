@@ -40,6 +40,7 @@ from channelwire_client import (  # noqa: E402
 from gateway.app.db import (  # noqa: E402
     add_membership,
     channel_history,
+    direct_history,
     init_db,
     save_channel_message,
     save_dm,
@@ -244,6 +245,31 @@ async def history(
                 {
                     "id": message.id,
                     "sender": message.sender,
+                    "text": message.body,
+                    "created_at": message.created_at.isoformat(),
+                }
+                for message in messages
+            ],
+        }
+
+
+@app.get("/history/dm/{other_username}")
+async def dm_history(
+    other_username: str,
+    token: str,
+    limit: int = Query(default=50, ge=1, le=200),
+) -> dict[str, Any]:
+    username = verify_token(token)
+    with session_scope() as db:
+        messages = direct_history(db, username, other_username, limit)
+        return {
+            "type": "dm_history",
+            "with": other_username,
+            "messages": [
+                {
+                    "id": message.id,
+                    "sender": message.sender,
+                    "recipient": message.recipient,
                     "text": message.body,
                     "created_at": message.created_at.isoformat(),
                 }
