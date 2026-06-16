@@ -153,6 +153,12 @@ Gateway WebSocket traffic is persisted through SQLAlchemy. Docker Compose uses P
 curl 'http://127.0.0.1:8000/history/general?token=TOKEN'
 ```
 
+Retrieve platform counters for basic monitoring with:
+
+```sh
+curl 'http://127.0.0.1:8000/stats?token=TOKEN'
+```
+
 ## Frontend
 
 Install and run the dashboard locally:
@@ -162,7 +168,7 @@ npm --prefix frontend install
 npm --prefix frontend run dev
 ```
 
-The dashboard connects to `http://127.0.0.1:8000` by default. Set `VITE_GATEWAY_URL` before building if the gateway runs somewhere else.
+The dashboard connects to `http://127.0.0.1:8000` by default. Set `VITE_GATEWAY_URL` before building if the gateway runs somewhere else. Its status panel shows gateway health, core address, persisted users/channels/messages, and local event counts.
 
 ## Roadmap
 

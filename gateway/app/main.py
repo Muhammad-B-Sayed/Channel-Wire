@@ -42,6 +42,7 @@ from gateway.app.db import (  # noqa: E402
     save_channel_message,
     save_dm,
     session_scope,
+    stats_snapshot,
     upsert_user,
 )
 
@@ -241,6 +242,13 @@ async def history(
                 for message in messages
             ],
         }
+
+
+@app.get("/stats")
+async def stats(token: str) -> dict[str, Any]:
+    verify_token(token)
+    with session_scope() as db:
+        return {"type": "stats", **stats_snapshot(db)}
 
 
 @app.websocket("/ws")

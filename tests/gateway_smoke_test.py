@@ -80,6 +80,15 @@ def run(server: str) -> None:
                 assert body["channel"] == "general"
                 assert body["messages"][-1]["sender"] == "webalice"
                 assert body["messages"][-1]["text"] == "hello from websocket"
+
+                stats = client.get("/stats", params={"token": token})
+                assert stats.status_code == 200
+                stats_body = stats.json()
+                assert stats_body["type"] == "stats"
+                assert stats_body["users"] == 1
+                assert stats_body["channels"] == 1
+                assert stats_body["messages"] == 1
+                assert stats_body["channel_messages"] == 1
     finally:
         proc.terminate()
         try:

@@ -1,7 +1,7 @@
 import os
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, create_engine, select
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, create_engine, func, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 
@@ -105,3 +105,14 @@ def channel_history(db: Session, channel_name: str, limit: int) -> list[Message]
         .scalars()
         .all()
     )[::-1]
+
+
+def stats_snapshot(db: Session) -> dict[str, int]:
+    return {
+        "users": db.scalar(select(func.count()).select_from(User)) or 0,
+        "channels": db.scalar(select(func.count()).select_from(Channel)) or 0,
+        "memberships": db.scalar(select(func.count()).select_from(Membership)) or 0,
+        "messages": db.scalar(select(func.count()).select_from(Message)) or 0,
+        "channel_messages": db.scalar(select(func.count()).where(Message.kind == "channel")) or 0,
+        "direct_messages": db.scalar(select(func.count()).where(Message.kind == "dm")) or 0,
+    }

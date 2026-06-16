@@ -38,6 +38,15 @@ type Health = {
   core_port: number;
 };
 
+type PlatformStats = {
+  users: number;
+  channels: number;
+  memberships: number;
+  messages: number;
+  channel_messages: number;
+  direct_messages: number;
+};
+
 const gatewayHttp = import.meta.env.VITE_GATEWAY_URL ?? "http://127.0.0.1:8000";
 const gatewayWs = gatewayHttp.replace(/^http/, "ws");
 
@@ -53,6 +62,7 @@ function App() {
   const [users, setUsers] = useState<string[]>([]);
   const [channels, setChannels] = useState<string[]>([]);
   const [health, setHealth] = useState<Health | null>(null);
+  const [platformStats, setPlatformStats] = useState<PlatformStats | null>(null);
   const [error, setError] = useState("");
   const socketRef = useRef<WebSocket | null>(null);
 
@@ -77,6 +87,16 @@ function App() {
     setHealth(await response.json());
   }
 
+  async function refreshStats(accessToken = token) {
+    if (!accessToken) {
+      return;
+    }
+    const response = await fetch(`${gatewayHttp}/stats?token=${encodeURIComponent(accessToken)}`);
+    if (response.ok) {
+      setPlatformStats(await response.json());
+    }
+  }
+
   async function createToken() {
     const response = await fetch(`${gatewayHttp}/auth/dev-token`, {
       method: "POST",
@@ -88,6 +108,7 @@ function App() {
     }
     const body = await response.json();
     setToken(body.access_token);
+    await refreshStats(body.access_token);
     return body.access_token as string;
   }
 
@@ -140,6 +161,7 @@ function App() {
     } else if (event.type === "channels") {
       setChannels(event.channels);
     }
+    refreshStats().catch(() => undefined);
   }
 
   function joinChannel(event: FormEvent) {
@@ -222,10 +244,22 @@ function App() {
               <dd>{health?.status ?? "unknown"}</dd>
               <dt>Core</dt>
               <dd>{health ? `${health.core_host}:${health.core_port}` : "checking"}</dd>
+              <dt>Users</dt>
+              <dd>{platformStats?.users ?? "-"}</dd>
+              <dt>Channels</dt>
+              <dd>{platformStats?.channels ?? "-"}</dd>
+              <dt>Stored</dt>
+              <dd>{platformStats?.messages ?? "-"}</dd>
               <dt>Events</dt>
               <dd>{stats.events}</dd>
             </dl>
-            <button className="iconButton" onClick={() => refreshHealth().catch((exc: Error) => setError(exc.message))}>
+            <button
+              className="iconButton"
+              onClick={() => {
+                refreshHealth().catch((exc: Error) => setError(exc.message));
+                refreshStats().catch((exc: Error) => setError(exc.message));
+              }}
+            >
               <RefreshCw size={16} />
               Refresh
             </button>
@@ -321,12 +355,12 @@ function App() {
           </div>
           <div className="panel metricGrid">
             <div>
-              <strong>{stats.messages}</strong>
-              <span>Channel</span>
+              <strong>{platformStats?.channel_messages ?? stats.messages}</strong>
+              <span>Stored Channel</span>
             </div>
             <div>
-              <strong>{stats.direct}</strong>
-              <span>Direct</span>
+              <strong>{platformStats?.direct_messages ?? stats.direct}</strong>
+              <span>Stored Direct</span>
             </div>
           </div>
         </aside>
