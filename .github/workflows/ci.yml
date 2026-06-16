@@ -37,3 +37,5 @@ jobs:
         run: make frontend-build
       - name: Validate Docker image build
         run: docker compose build
+      - name: Run Docker Compose smoke test
+        run: make test-compose

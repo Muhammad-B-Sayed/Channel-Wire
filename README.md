@@ -92,6 +92,7 @@ make test
 make test-load
 make test-backpressure
 make test-malformed
+make test-compose
 make sanitize
 ```
 
@@ -102,6 +103,8 @@ make sanitize
 `make test-backpressure` starts the server with intentionally tiny write queues and send buffers, then verifies that a slow reader is disconnected while other clients continue to exchange messages and request stats.
 
 `make test-malformed` sends invalid usernames, truncated string payloads, unknown message types, and oversized frames, then verifies error responses and server health afterward.
+
+`make test-compose` builds and runs the full Docker Compose stack, then verifies the gateway, PostgreSQL-backed auth/stats APIs, C core stats through the gateway, and the React dashboard HTTP surface.
 
 ## Docker
 
