@@ -3,32 +3,46 @@ CFLAGS ?= -std=c11 -Wall -Wextra -Wpedantic -Werror -O2 -g
 CPPFLAGS ?= -D_POSIX_C_SOURCE=200809L -Icore/include
 LDFLAGS ?=
 SANITIZE_FLAGS := -fsanitize=address,undefined -fno-omit-frame-pointer
+SANITIZE ?= 0
+
+ifeq ($(SANITIZE),1)
+BUILD_MODE := sanitize
+CFLAGS += $(SANITIZE_FLAGS)
+else
+BUILD_MODE := release
+endif
 
 BUILD_DIR := build
+OBJ_DIR := $(BUILD_DIR)/obj/$(BUILD_MODE)
 CORE_BIN := $(BUILD_DIR)/channelwire-server
 CORE_SRCS := core/src/server.c core/src/protocol.c
-CORE_OBJS := $(CORE_SRCS:%.c=$(BUILD_DIR)/%.o)
+CORE_OBJS := $(CORE_SRCS:%.c=$(OBJ_DIR)/%.o)
 
-.PHONY: all clean test test-load test-backpressure test-malformed test-gateway test-compose frontend-build sanitize docker-build docker-up docker-down
+.PHONY: all clean test test-load test-lifecycle test-backpressure test-malformed test-gateway test-compose frontend-build sanitize docker-build docker-up docker-down FORCE
 
 all: $(CORE_BIN)
 
-$(CORE_BIN): $(CORE_OBJS)
+$(CORE_BIN): $(CORE_OBJS) FORCE
 	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(CORE_OBJS)
 
-$(BUILD_DIR)/%.o: %.c
+$(OBJ_DIR)/%.o: %.c
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c -o $@ $<
 
-sanitize: CFLAGS += $(SANITIZE_FLAGS)
-sanitize: clean all
+FORCE:
+
+sanitize:
+	$(MAKE) SANITIZE=1 all
 
 test: all
 	python3 tests/integration_test.py --server ./$(CORE_BIN)
 
 test-load: all
 	python3 tests/load_test.py --server ./$(CORE_BIN)
+
+test-lifecycle: all
+	python3 tests/lifecycle_test.py --server ./$(CORE_BIN)
 
 test-backpressure: all
 	python3 tests/backpressure_test.py --server ./$(CORE_BIN)

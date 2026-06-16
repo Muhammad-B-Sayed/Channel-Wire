@@ -90,6 +90,7 @@ Useful commands include `/join general`, plain text to send to the active channe
 ```sh
 make test
 make test-load
+make test-lifecycle
 make test-backpressure
 make test-malformed
 make test-compose
@@ -99,6 +100,8 @@ make sanitize
 `make test` starts the server on an ephemeral local port and verifies registration, channel chat, direct messages, user/channel listing, graceful quit, and malformed oversized frame handling.
 
 `make test-load` starts the server and runs a concurrent TCP client test against the binary protocol.
+
+`make test-lifecycle` verifies duplicate username rejection, joining multiple channels, switching active channels, renaming users, leaving channels, and graceful quit behavior.
 
 `make test-backpressure` starts the server with intentionally tiny write queues and send buffers, then verifies that a slow reader is disconnected while other clients continue to exchange messages and request stats.
 

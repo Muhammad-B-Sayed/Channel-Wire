@@ -420,6 +420,32 @@ static void join_channel(client *c, const uint8_t *payload, size_t payload_len, 
     safe_enqueue_text(c, CW_MSG_OK, response);
 }
 
+static void switch_channel(client *c, const uint8_t *payload, size_t payload_len) {
+    char channel[CW_CHANNEL_CAP + 1];
+    ssize_t channel_idx;
+    char response[96];
+
+    if (!c->registered) {
+        safe_enqueue_text(c, CW_MSG_ERROR, "send HELLO first");
+        return;
+    }
+    if (read_one_string_payload(payload, payload_len, channel, sizeof(channel)) != 0 ||
+        !cw_valid_name(channel, 1, CW_CHANNEL_CAP)) {
+        safe_enqueue_text(c, CW_MSG_ERROR, "invalid channel");
+        return;
+    }
+
+    channel_idx = find_channel(channel);
+    if (channel_idx < 0 || !c->joined[channel_idx]) {
+        safe_enqueue_text(c, CW_MSG_ERROR, "join channel before switching");
+        return;
+    }
+
+    snprintf(c->active_channel, sizeof(c->active_channel), "%s", channel);
+    snprintf(response, sizeof(response), "switched %s", channel);
+    safe_enqueue_text(c, CW_MSG_OK, response);
+}
+
 static void leave_channel(client *c, const uint8_t *payload, size_t payload_len) {
     char channel[CW_CHANNEL_CAP + 1];
     ssize_t channel_idx;
@@ -519,7 +545,7 @@ static void handle_frame(client *c, uint8_t type, const uint8_t *payload, size_t
         join_channel(c, payload, payload_len, 1);
         break;
     case CW_MSG_SWITCH:
-        join_channel(c, payload, payload_len, 1);
+        switch_channel(c, payload, payload_len);
         break;
     case CW_MSG_LEAVE:
         leave_channel(c, payload, payload_len);
