@@ -91,6 +91,7 @@ Useful commands include `/join general`, plain text to send to the active channe
 make test
 make test-load
 make test-backpressure
+make test-malformed
 make sanitize
 ```
 
@@ -99,6 +100,8 @@ make sanitize
 `make test-load` starts the server and runs a concurrent TCP client test against the binary protocol.
 
 `make test-backpressure` starts the server with intentionally tiny write queues and send buffers, then verifies that a slow reader is disconnected while other clients continue to exchange messages and request stats.
+
+`make test-malformed` sends invalid usernames, truncated string payloads, unknown message types, and oversized frames, then verifies error responses and server health afterward.
 
 ## Docker
 

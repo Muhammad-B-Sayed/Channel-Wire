@@ -17,6 +17,8 @@ jobs:
         run: make test-load
       - name: Run slow-reader backpressure test
         run: make test-backpressure
+      - name: Run malformed protocol test
+        run: make test-malformed
       - name: Install gateway dependencies
         run: python3 -m pip install -r gateway/requirements.txt
       - name: Run gateway smoke test
@@ -27,6 +29,8 @@ jobs:
         run: make test
       - name: Run sanitizer backpressure test
         run: make test-backpressure
+      - name: Run sanitizer malformed protocol test
+        run: make test-malformed
       - name: Run sanitizer gateway smoke test
         run: make test-gateway
       - name: Build React dashboard
