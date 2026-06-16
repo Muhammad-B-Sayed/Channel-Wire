@@ -207,10 +207,10 @@ npm --prefix frontend install
 npm --prefix frontend run dev
 ```
 
-The dashboard connects to `http://127.0.0.1:8000` by default. Set `VITE_GATEWAY_URL` before building if the gateway runs somewhere else. It can register/login for a JWT, use a dev token for demos, connect to the WebSocket gateway, and show gateway health, core address, persisted users/channels/messages, and local event counts.
+The dashboard connects to `http://127.0.0.1:8000` by default. Set `VITE_GATEWAY_URL` before building if the gateway runs somewhere else. It can register/login for a JWT, use a dev token for demos, connect to the WebSocket gateway, and show gateway health, core address, live core users/channels, persisted users/channels/memberships/messages, queue disconnects, and local event counts.
 
 ## Roadmap
 
 - Add refresh-token/session management beyond short-lived bearer JWTs.
-- Expand the React dashboard with richer server monitoring.
+- Add deeper visualizations for message rates and queue pressure.
 - Add larger soak tests and exported benchmark reports.

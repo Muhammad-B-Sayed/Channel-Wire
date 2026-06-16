@@ -59,6 +59,16 @@ type CoreStats = {
   max_queue_bytes: number;
 };
 
+type PersistedUser = {
+  username: string;
+  created_at: string;
+};
+
+type PersistedChannel = {
+  name: string;
+  created_at: string;
+};
+
 const gatewayHttp = import.meta.env.VITE_GATEWAY_URL ?? "http://127.0.0.1:8000";
 const gatewayWs = gatewayHttp.replace(/^http/, "ws");
 
@@ -77,6 +87,8 @@ function App() {
   const [health, setHealth] = useState<Health | null>(null);
   const [platformStats, setPlatformStats] = useState<PlatformStats | null>(null);
   const [coreStats, setCoreStats] = useState<CoreStats | null>(null);
+  const [persistedUsers, setPersistedUsers] = useState<PersistedUser[]>([]);
+  const [persistedChannels, setPersistedChannels] = useState<PersistedChannel[]>([]);
   const [error, setError] = useState("");
   const socketRef = useRef<WebSocket | null>(null);
 
@@ -113,6 +125,18 @@ function App() {
     const coreResponse = await fetch(`${gatewayHttp}/core-stats?token=${encodeURIComponent(accessToken)}`);
     if (coreResponse.ok) {
       setCoreStats(await coreResponse.json());
+    }
+
+    const usersResponse = await fetch(`${gatewayHttp}/db/users?token=${encodeURIComponent(accessToken)}`);
+    if (usersResponse.ok) {
+      const body = await usersResponse.json();
+      setPersistedUsers(body.users);
+    }
+
+    const channelsResponse = await fetch(`${gatewayHttp}/db/channels?token=${encodeURIComponent(accessToken)}`);
+    if (channelsResponse.ok) {
+      const body = await channelsResponse.json();
+      setPersistedChannels(body.channels);
     }
   }
 
@@ -327,6 +351,8 @@ function App() {
               <dd>{platformStats?.users ?? "-"}</dd>
               <dt>Channels</dt>
               <dd>{platformStats?.channels ?? "-"}</dd>
+              <dt>Members</dt>
+              <dd>{platformStats?.memberships ?? "-"}</dd>
               <dt>Stored</dt>
               <dd>{platformStats?.messages ?? "-"}</dd>
               <dt>Core Clients</dt>
@@ -351,7 +377,7 @@ function App() {
           <div className="panel">
             <div className="panelTitle">
               <Hash size={18} />
-              Channels
+              Live Channels
             </div>
             <button className="iconButton" onClick={() => send({ type: "list" })}>
               <RefreshCw size={16} />
@@ -367,7 +393,7 @@ function App() {
           <div className="panel">
             <div className="panelTitle">
               <Users size={18} />
-              Users
+              Live Users
             </div>
             <button className="iconButton" onClick={() => send({ type: "who" })}>
               <RefreshCw size={16} />
@@ -376,6 +402,30 @@ function App() {
             <ul className="compactList">
               {users.map((item) => (
                 <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="panel">
+            <div className="panelTitle">
+              <Hash size={18} />
+              Persisted Channels
+            </div>
+            <ul className="compactList">
+              {persistedChannels.map((item) => (
+                <li key={item.name}>{item.name}</li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="panel">
+            <div className="panelTitle">
+              <Users size={18} />
+              Persisted Users
+            </div>
+            <ul className="compactList">
+              {persistedUsers.map((item) => (
+                <li key={item.username}>{item.username}</li>
               ))}
             </ul>
           </div>
