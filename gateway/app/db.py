@@ -126,6 +126,26 @@ def direct_history(db: Session, username: str, other_username: str, limit: int) 
     )[::-1]
 
 
+def list_users(db: Session) -> list[User]:
+    return list(db.execute(select(User).order_by(User.username)).scalars().all())
+
+
+def list_channels(db: Session) -> list[Channel]:
+    return list(db.execute(select(Channel).order_by(Channel.name)).scalars().all())
+
+
+def channel_members(db: Session, channel_name: str) -> list[Membership]:
+    return list(
+        db.execute(
+            select(Membership)
+            .where(Membership.channel_name == channel_name)
+            .order_by(Membership.username)
+        )
+        .scalars()
+        .all()
+    )
+
+
 def stats_snapshot(db: Session) -> dict[str, int]:
     return {
         "users": db.scalar(select(func.count()).select_from(User)) or 0,

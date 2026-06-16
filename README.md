@@ -163,6 +163,14 @@ Retrieve direct-message history with another user:
 curl 'http://127.0.0.1:8000/history/dm/bob?token=TOKEN'
 ```
 
+Inspect persisted users, channels, and memberships:
+
+```sh
+curl 'http://127.0.0.1:8000/db/users?token=TOKEN'
+curl 'http://127.0.0.1:8000/db/channels?token=TOKEN'
+curl 'http://127.0.0.1:8000/db/channels/general/members?token=TOKEN'
+```
+
 Retrieve platform counters for basic monitoring with:
 
 ```sh
@@ -182,6 +190,6 @@ The dashboard connects to `http://127.0.0.1:8000` by default. Set `VITE_GATEWAY_
 
 ## Roadmap
 
-- Expand gateway REST coverage and membership-aware channel APIs.
+- Add stricter auth flows beyond development token issuance.
 - Expand the React dashboard with richer server monitoring.
 - Expand load tests for slow-reader backpressure behavior.

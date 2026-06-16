@@ -42,11 +42,14 @@ from gateway.app.db import (  # noqa: E402
     channel_history,
     direct_history,
     init_db,
+    list_channels,
+    list_users,
     save_channel_message,
     save_dm,
     session_scope,
     stats_snapshot,
     upsert_user,
+    channel_members,
 )
 
 
@@ -227,6 +230,49 @@ async def channels(token: str) -> dict[str, Any]:
         await core_send(writer, QUIT)
         writer.close()
         await writer.wait_closed()
+
+
+@app.get("/db/users")
+async def persisted_users(token: str) -> dict[str, Any]:
+    verify_token(token)
+    with session_scope() as db:
+        users = list_users(db)
+        return {
+            "type": "users",
+            "users": [
+                {"username": user.username, "created_at": user.created_at.isoformat()}
+                for user in users
+            ],
+        }
+
+
+@app.get("/db/channels")
+async def persisted_channels(token: str) -> dict[str, Any]:
+    verify_token(token)
+    with session_scope() as db:
+        channels = list_channels(db)
+        return {
+            "type": "channels",
+            "channels": [
+                {"name": channel.name, "created_at": channel.created_at.isoformat()}
+                for channel in channels
+            ],
+        }
+
+
+@app.get("/db/channels/{channel_name}/members")
+async def persisted_channel_members(channel_name: str, token: str) -> dict[str, Any]:
+    verify_token(token)
+    with session_scope() as db:
+        members = channel_members(db, channel_name)
+        return {
+            "type": "members",
+            "channel": channel_name,
+            "members": [
+                {"username": member.username, "joined_at": member.created_at.isoformat()}
+                for member in members
+            ],
+        }
 
 
 @app.get("/history/{channel_name}")

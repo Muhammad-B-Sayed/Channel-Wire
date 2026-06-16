@@ -89,6 +89,25 @@ def run(server: str) -> None:
                 assert body["messages"][-1]["sender"] == "webalice"
                 assert body["messages"][-1]["text"] == "hello from websocket"
 
+                persisted_users = client.get("/db/users", params={"token": token})
+                assert persisted_users.status_code == 200
+                assert "webalice" in {
+                    user["username"] for user in persisted_users.json()["users"]
+                }
+
+                persisted_channels = client.get("/db/channels", params={"token": token})
+                assert persisted_channels.status_code == 200
+                assert "general" in {
+                    channel["name"] for channel in persisted_channels.json()["channels"]
+                }
+
+                members = client.get("/db/channels/general/members", params={"token": token})
+                assert members.status_code == 200
+                assert members.json()["channel"] == "general"
+                assert "webalice" in {
+                    member["username"] for member in members.json()["members"]
+                }
+
                 stats = client.get("/stats", params={"token": token})
                 assert stats.status_code == 200
                 stats_body = stats.json()
