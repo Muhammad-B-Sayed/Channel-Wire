@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import json
 import os
 import queue
 import socket
@@ -16,6 +17,8 @@ from channelwire_client import (  # noqa: E402
     JOIN,
     QUIT,
     SAY,
+    STATS,
+    STATS_RESP,
     connect_registered,
     decode_strings,
     read_frame,
@@ -66,6 +69,17 @@ def client_worker(port: int, idx: int, ready: threading.Barrier, errors: queue.Q
         errors.put(f"{username}: {exc}")
 
 
+def read_stats(port: int) -> dict[str, int]:
+    with connect_registered("127.0.0.1", port, "loadobserver", timeout=5) as sock:
+        send_frame(sock, STATS)
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            frame = read_frame(sock)
+            if frame.msg_type == STATS_RESP:
+                return json.loads(frame.payload)
+    raise AssertionError("did not receive load-test stats")
+
+
 def run(server: str, clients: int) -> None:
     port = pick_port()
     proc = subprocess.Popen(
@@ -84,10 +98,12 @@ def run(server: str, clients: int) -> None:
             for i in range(clients)
         ]
 
+        start = time.monotonic()
         for thread in threads:
             thread.start()
         for thread in threads:
             thread.join(timeout=15)
+        elapsed = time.monotonic() - start
 
         alive = [thread.name for thread in threads if thread.is_alive()]
         if alive:
@@ -97,6 +113,17 @@ def run(server: str, clients: int) -> None:
             while not errors.empty():
                 failures.append(errors.get())
             raise AssertionError("\n".join(failures))
+
+        stats = read_stats(port)
+        assert stats["channel_messages"] >= clients, stats
+        messages_per_second = clients / elapsed if elapsed > 0 else 0
+        print(
+            "load-test summary: "
+            f"clients={clients} elapsed={elapsed:.3f}s "
+            f"client_messages_per_second={messages_per_second:.1f} "
+            f"server_channel_messages={stats['channel_messages']} "
+            f"total_connections={stats['total_connections']}"
+        )
     finally:
         proc.terminate()
         try:

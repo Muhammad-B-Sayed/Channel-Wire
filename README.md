@@ -99,7 +99,7 @@ make sanitize
 
 `make test` starts the server on an ephemeral local port and verifies registration, channel chat, direct messages, user/channel listing, graceful quit, and malformed oversized frame handling.
 
-`make test-load` starts the server and runs a concurrent TCP client test against the binary protocol.
+`make test-load` starts the server and runs a concurrent TCP client test against the binary protocol, then prints elapsed time, client-message throughput, server channel-message count, and total connection count.
 
 `make test-lifecycle` verifies duplicate username rejection, joining multiple channels, switching active channels, renaming users, leaving channels, and graceful quit behavior.
 
@@ -213,4 +213,4 @@ The dashboard connects to `http://127.0.0.1:8000` by default. Set `VITE_GATEWAY_
 
 - Add refresh-token/session management beyond short-lived bearer JWTs.
 - Expand the React dashboard with richer server monitoring.
-- Expand load tests for slow-reader backpressure behavior.
+- Add larger soak tests and exported benchmark reports.
