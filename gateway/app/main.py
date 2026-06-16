@@ -7,6 +7,7 @@ import os
 import secrets
 import sys
 import time
+from collections import deque
 from pathlib import Path
 from typing import Any
 
@@ -63,6 +64,7 @@ CORE_HOST = os.getenv("CHANNELWIRE_CORE_HOST", "127.0.0.1")
 CORE_PORT = int(os.getenv("CHANNELWIRE_CORE_PORT", "5555"))
 JWT_SECRET = os.getenv("CHANNELWIRE_JWT_SECRET", "dev-secret-change-me")
 JWT_ALGORITHM = "HS256"
+active_gateway_users: dict[str, int] = {}
 
 CLIENT_COMMANDS = {
     "join": JOIN,
@@ -417,7 +419,9 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         return
 
     await websocket.accept()
+    active_gateway_users[username] = active_gateway_users.get(username, 0) + 1
     await websocket.send_json({"type": "ready", "username": username})
+    pending_dms: deque[tuple[str, str]] = deque()
 
     async def pump_core_to_ws() -> None:
         while True:
@@ -428,9 +432,17 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     save_channel_message(db, event["channel"], event["sender"], event["text"])
                     db.commit()
             elif event["type"] == "dm":
+                if active_gateway_users.get(event["sender"], 0) == 0:
+                    with session_scope() as db:
+                        save_dm(db, event["sender"], username, event["text"])
+                        db.commit()
+            elif event["type"] == "ok" and event["message"] == "direct message sent" and pending_dms:
+                target, text = pending_dms.popleft()
                 with session_scope() as db:
-                    save_dm(db, event["sender"], username, event["text"])
+                    save_dm(db, username, target, text)
                     db.commit()
+            elif event["type"] == "error" and pending_dms:
+                pending_dms.popleft()
             await websocket.send_json(event)
 
     async def pump_ws_to_core() -> None:
@@ -446,6 +458,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 with session_scope() as db:
                     add_membership(db, username, message["channel"])
                     db.commit()
+            elif msg_type == DM:
+                pending_dms.append((message["to"], message["text"]))
             await core_send(writer, msg_type, payload)
             if msg_type == QUIT:
                 return
@@ -464,5 +478,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     except (WebSocketDisconnect, asyncio.IncompleteReadError, ConnectionError):
         pass
     finally:
+        active_gateway_users[username] = max(active_gateway_users.get(username, 1) - 1, 0)
+        if active_gateway_users[username] == 0:
+            del active_gateway_users[username]
         writer.close()
         await writer.wait_closed()

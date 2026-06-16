@@ -11,6 +11,9 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+
+from channelwire_client import DM_RECV, QUIT, connect_registered, decode_strings, read_frame, send_frame  # noqa: E402
 
 
 def receive_type(ws, expected_type: str) -> dict:
@@ -19,6 +22,14 @@ def receive_type(ws, expected_type: str) -> dict:
         if event["type"] == expected_type:
             return event
     raise AssertionError(f"did not receive event type {expected_type}")
+
+
+def receive_core_type(sock: socket.socket, expected_type: int) -> object:
+    for _ in range(10):
+        event = read_frame(sock)
+        if event.msg_type == expected_type:
+            return event
+    raise AssertionError(f"did not receive core frame type {expected_type}")
 
 
 def pick_port() -> int:
@@ -152,6 +163,29 @@ def run(server: str) -> None:
                 assert core_stats_body["total_connections"] >= 2
                 assert core_stats_body["channel_messages"] >= 1
 
+                raw_bob = connect_registered("127.0.0.1", port, "rawbob", timeout=3)
+                try:
+                    with client.websocket_connect(f"/ws?token={token}") as alice_ws:
+                        assert alice_ws.receive_json() == {"type": "ready", "username": "webalice"}
+                        alice_ws.send_json({"type": "dm", "to": "rawbob", "text": "gateway to raw core"})
+                        assert receive_type(alice_ws, "ok") == {
+                            "type": "ok",
+                            "message": "direct message sent",
+                        }
+                        raw_dm = receive_core_type(raw_bob, DM_RECV)
+                        assert decode_strings(raw_dm.payload) == ["webalice", "gateway to raw core"]
+                        alice_ws.send_json({"type": "quit"})
+                finally:
+                    send_frame(raw_bob, QUIT)
+                    raw_bob.close()
+
+                raw_history = client.get("/history/dm/rawbob", params={"token": token})
+                assert raw_history.status_code == 200
+                raw_body = raw_history.json()
+                assert raw_body["messages"][-1]["sender"] == "webalice"
+                assert raw_body["messages"][-1]["recipient"] == "rawbob"
+                assert raw_body["messages"][-1]["text"] == "gateway to raw core"
+
                 bob_resp = client.post("/auth/dev-token", json={"username": "webbob"})
                 assert bob_resp.status_code == 200
                 bob_token = bob_resp.json()["access_token"]
@@ -181,6 +215,9 @@ def run(server: str) -> None:
                 assert dm_body["messages"][-1]["sender"] == "webalice"
                 assert dm_body["messages"][-1]["recipient"] == "webbob"
                 assert dm_body["messages"][-1]["text"] == "private browser hello"
+                assert [
+                    message["text"] for message in dm_body["messages"]
+                ].count("private browser hello") == 1
     finally:
         proc.terminate()
         try:
