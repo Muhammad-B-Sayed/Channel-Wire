@@ -1,11 +1,11 @@
 # ChannelWire
 
-ChannelWire is a production-style real-time messaging platform in progress. It includes a C11 TCP messaging core with non-blocking sockets, `poll()` multiplexing, a compact binary protocol, bounded outgoing queues, malformed-frame rejection, a FastAPI WebSocket/REST gateway, and database-backed message history for gateway traffic.
+ChannelWire is a production-style real-time messaging platform in progress. It includes a C11 TCP messaging core with non-blocking sockets, `poll()` multiplexing, a compact binary protocol, bounded outgoing queues, malformed-frame rejection, a FastAPI WebSocket/REST gateway, database-backed message history for gateway traffic, and a React + TypeScript dashboard.
 
 ## Current Architecture
 
 ```text
-Browser / HTTP clients
+React TypeScript dashboard
    |
    | JSON over REST + WebSocket
    v
@@ -20,7 +20,7 @@ C messaging core
 PostgreSQL
 ```
 
-Planned layers include a React TypeScript frontend and broader server monitoring.
+Planned layers include broader server monitoring and slow-client backpressure tests.
 
 ## Binary Protocol
 
@@ -108,7 +108,7 @@ This runs the C core on `127.0.0.1:5555` through Docker port publishing. Stop it
 docker compose down
 ```
 
-The gateway is available at `http://127.0.0.1:8000` and PostgreSQL is published on `127.0.0.1:5432` when Docker Compose is running.
+The React dashboard is available at `http://127.0.0.1:3000`, the gateway is available at `http://127.0.0.1:8000`, and PostgreSQL is published on `127.0.0.1:5432` when Docker Compose is running.
 
 ## Gateway
 
@@ -153,9 +153,19 @@ Gateway WebSocket traffic is persisted through SQLAlchemy. Docker Compose uses P
 curl 'http://127.0.0.1:8000/history/general?token=TOKEN'
 ```
 
+## Frontend
+
+Install and run the dashboard locally:
+
+```sh
+npm --prefix frontend install
+npm --prefix frontend run dev
+```
+
+The dashboard connects to `http://127.0.0.1:8000` by default. Set `VITE_GATEWAY_URL` before building if the gateway runs somewhere else.
+
 ## Roadmap
 
 - Expand gateway REST coverage and membership-aware channel APIs.
-- Add a React TypeScript frontend.
-- Add Docker Compose service for the frontend.
+- Expand the React dashboard with richer server monitoring.
 - Expand load tests for slow-reader backpressure behavior.

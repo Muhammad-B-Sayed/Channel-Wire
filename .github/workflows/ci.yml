@@ -25,5 +25,7 @@ jobs:
         run: make test
       - name: Run sanitizer gateway smoke test
         run: make test-gateway
+      - name: Build React dashboard
+        run: make frontend-build
       - name: Validate Docker image build
         run: docker compose build

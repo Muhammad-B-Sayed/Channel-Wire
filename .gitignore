@@ -10,3 +10,6 @@ venv/
 .env
 *.db
 *.sqlite
+node_modules/
+frontend/dist/
+*.tsbuildinfo
