@@ -214,3 +214,7 @@ The dashboard connects to `http://127.0.0.1:8000` by default. Set `VITE_GATEWAY_
 - Add refresh-token/session management beyond short-lived bearer JWTs.
 - Add deeper visualizations for message rates and queue pressure.
 - Add larger soak tests and exported benchmark reports.
+
+## Requirement Evidence
+
+See `docs/requirements-audit.md` for a requirement-by-requirement evidence map and verification commands.
