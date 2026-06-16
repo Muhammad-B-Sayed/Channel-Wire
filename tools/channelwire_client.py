@@ -13,6 +13,7 @@ WHO = 7
 LIST = 8
 NICK = 9
 QUIT = 10
+STATS = 11
 
 OK = 101
 ERROR = 102

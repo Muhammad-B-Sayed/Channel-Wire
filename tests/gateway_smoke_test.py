@@ -89,6 +89,13 @@ def run(server: str) -> None:
                 assert stats_body["channels"] == 1
                 assert stats_body["messages"] == 1
                 assert stats_body["channel_messages"] == 1
+
+                core_stats = client.get("/core-stats", params={"token": token})
+                assert core_stats.status_code == 200
+                core_stats_body = core_stats.json()
+                assert core_stats_body["type"] == "core_stats"
+                assert core_stats_body["total_connections"] >= 2
+                assert core_stats_body["channel_messages"] >= 1
     finally:
         proc.terminate()
         try:

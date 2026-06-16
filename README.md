@@ -20,7 +20,7 @@ C messaging core
 PostgreSQL
 ```
 
-Planned layers include broader server monitoring and slow-client backpressure tests.
+Planned layers include richer gateway APIs and deeper dashboard monitoring.
 
 ## Binary Protocol
 
@@ -53,6 +53,7 @@ Client message types:
 | 8 | `LIST` | empty |
 | 9 | `NICK` | username string |
 | 10 | `QUIT` | empty |
+| 11 | `STATS` | empty |
 
 Server message types:
 
@@ -65,7 +66,7 @@ Server message types:
 | 105 | `SYSTEM` | UTF-8 notification text |
 | 106 | `WHO_RESP` | newline-delimited users |
 | 107 | `LIST_RESP` | newline-delimited channels |
-| 108 | `STATS_RESP` | reserved |
+| 108 | `STATS_RESP` | JSON server stats |
 
 ## Build and Run
 
@@ -82,19 +83,22 @@ In another terminal, connect with the development CLI:
 python3 tools/cw_client.py alice
 ```
 
-Useful commands include `/join general`, plain text to send to the active channel, `/dm USER MESSAGE`, `/who`, `/list`, and `/quit`.
+Useful commands include `/join general`, plain text to send to the active channel, `/dm USER MESSAGE`, `/who`, `/list`, `/stats`, and `/quit`.
 
 ## Test
 
 ```sh
 make test
 make test-load
+make test-backpressure
 make sanitize
 ```
 
 `make test` starts the server on an ephemeral local port and verifies registration, channel chat, direct messages, user/channel listing, graceful quit, and malformed oversized frame handling.
 
 `make test-load` starts the server and runs a concurrent TCP client test against the binary protocol.
+
+`make test-backpressure` starts the server with intentionally tiny write queues and send buffers, then verifies that a slow reader is disconnected while other clients continue to exchange messages and request stats.
 
 ## Docker
 

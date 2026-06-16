@@ -19,6 +19,7 @@ typedef enum {
     CW_MSG_LIST = 8,
     CW_MSG_NICK = 9,
     CW_MSG_QUIT = 10,
+    CW_MSG_STATS = 11,
 } cw_client_msg_type;
 
 typedef enum {

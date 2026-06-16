@@ -27,6 +27,8 @@ from channelwire_client import (  # noqa: E402
     OK,
     QUIT,
     SAY,
+    STATS,
+    STATS_RESP,
     SWITCH,
     SYSTEM,
     WHO,
@@ -62,6 +64,7 @@ CLIENT_COMMANDS = {
     "list": LIST,
     "nick": NICK,
     "quit": QUIT,
+    "stats": STATS,
 }
 
 
@@ -141,7 +144,7 @@ def core_payload_for_command(message: dict[str, Any]) -> tuple[int, bytes]:
         raise ValueError("unknown command")
 
     msg_type = CLIENT_COMMANDS[command]
-    if msg_type in (WHO, LIST, QUIT):
+    if msg_type in (WHO, LIST, QUIT, STATS):
         return msg_type, b""
     if msg_type in (JOIN, SWITCH, LEAVE):
         channel = message.get("channel")
@@ -187,6 +190,11 @@ def gateway_event(msg_type: int, payload: bytes) -> dict[str, Any]:
         return {"type": "error", "message": payload.decode("utf-8", errors="replace")}
     if msg_type == SYSTEM:
         return {"type": "system", "message": payload.decode("utf-8", errors="replace")}
+    if msg_type == STATS_RESP:
+        try:
+            return {"type": "core_stats", **json.loads(payload)}
+        except json.JSONDecodeError:
+            return {"type": "core_stats", "raw": payload.decode("utf-8", errors="replace")}
     return {"type": "raw", "message_type": msg_type, "payload": payload.hex()}
 
 
@@ -249,6 +257,23 @@ async def stats(token: str) -> dict[str, Any]:
     verify_token(token)
     with session_scope() as db:
         return {"type": "stats", **stats_snapshot(db)}
+
+
+@app.get("/core-stats")
+async def core_stats(token: str) -> dict[str, Any]:
+    username = verify_token(token)
+    reader, writer = await open_registered_core(username)
+    try:
+        await core_send(writer, STATS)
+        msg_type, payload = await core_read(reader)
+        event = gateway_event(msg_type, payload)
+        if event["type"] != "core_stats":
+            raise HTTPException(status_code=502, detail=event)
+        return event
+    finally:
+        await core_send(writer, QUIT)
+        writer.close()
+        await writer.wait_closed()
 
 
 @app.websocket("/ws")

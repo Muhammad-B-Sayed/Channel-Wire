@@ -47,6 +47,18 @@ type PlatformStats = {
   direct_messages: number;
 };
 
+type CoreStats = {
+  current_connections: number;
+  registered_clients: number;
+  total_connections: number;
+  channels: number;
+  channel_messages: number;
+  direct_messages: number;
+  malformed_frames: number;
+  queue_disconnects: number;
+  max_queue_bytes: number;
+};
+
 const gatewayHttp = import.meta.env.VITE_GATEWAY_URL ?? "http://127.0.0.1:8000";
 const gatewayWs = gatewayHttp.replace(/^http/, "ws");
 
@@ -63,6 +75,7 @@ function App() {
   const [channels, setChannels] = useState<string[]>([]);
   const [health, setHealth] = useState<Health | null>(null);
   const [platformStats, setPlatformStats] = useState<PlatformStats | null>(null);
+  const [coreStats, setCoreStats] = useState<CoreStats | null>(null);
   const [error, setError] = useState("");
   const socketRef = useRef<WebSocket | null>(null);
 
@@ -94,6 +107,11 @@ function App() {
     const response = await fetch(`${gatewayHttp}/stats?token=${encodeURIComponent(accessToken)}`);
     if (response.ok) {
       setPlatformStats(await response.json());
+    }
+
+    const coreResponse = await fetch(`${gatewayHttp}/core-stats?token=${encodeURIComponent(accessToken)}`);
+    if (coreResponse.ok) {
+      setCoreStats(await coreResponse.json());
     }
   }
 
@@ -250,6 +268,10 @@ function App() {
               <dd>{platformStats?.channels ?? "-"}</dd>
               <dt>Stored</dt>
               <dd>{platformStats?.messages ?? "-"}</dd>
+              <dt>Core Clients</dt>
+              <dd>{coreStats?.registered_clients ?? "-"}</dd>
+              <dt>Queue Drops</dt>
+              <dd>{coreStats?.queue_disconnects ?? "-"}</dd>
               <dt>Events</dt>
               <dd>{stats.events}</dd>
             </dl>

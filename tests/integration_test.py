@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import json
 import os
 import socket
 import struct
@@ -22,6 +23,8 @@ from channelwire_client import (
     OK,
     QUIT,
     SAY,
+    STATS,
+    STATS_RESP,
     SYSTEM,
     WHO,
     WHO_RESP,
@@ -115,6 +118,16 @@ def run(server: str) -> None:
         got = read_frame(bad)
         assert got.msg_type == ERROR
         assert b"malformed" in got.payload
+
+        send_frame(alice, STATS)
+        got = read_frame(alice)
+        assert got.msg_type == STATS_RESP
+        stats = json.loads(got.payload)
+        assert stats["registered_clients"] >= 2
+        assert stats["channels"] >= 1
+        assert stats["channel_messages"] >= 1
+        assert stats["direct_messages"] >= 1
+        assert stats["malformed_frames"] >= 1
 
         alice.sendall(encode_frame(QUIT))
         bob.sendall(encode_frame(QUIT))

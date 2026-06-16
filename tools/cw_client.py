@@ -12,6 +12,7 @@ from channelwire_client import (
     NICK,
     QUIT,
     SAY,
+    STATS,
     SWITCH,
     WHO,
     connect_registered,
@@ -30,6 +31,7 @@ HELP = """commands:
   /nick USER          change username
   /who                list connected users
   /list               list channels
+  /stats              show core server stats
   /quit               disconnect
   /help               show this help
 
@@ -61,6 +63,8 @@ def handle_command(sock: socket.socket, line: str) -> bool:
         send_frame(sock, WHO)
     elif command == "/list":
         send_frame(sock, LIST)
+    elif command == "/stats":
+        send_frame(sock, STATS)
     elif command == "/quit":
         send_frame(sock, QUIT)
         return False

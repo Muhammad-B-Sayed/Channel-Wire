@@ -23,7 +23,7 @@
 #define CW_TEXT_CAP 1024
 #define CW_INBUF_CAP (CW_FRAME_HEADER_SIZE + CW_MAX_PAYLOAD_SIZE)
 #define CW_OUTBUF_CAP (CW_FRAME_HEADER_SIZE + CW_MAX_PAYLOAD_SIZE)
-#define CW_MAX_QUEUE_BYTES (64u * 1024u)
+#define CW_DEFAULT_MAX_QUEUE_BYTES (64u * 1024u)
 
 typedef struct out_frame {
     uint8_t data[CW_OUTBUF_CAP];
@@ -45,9 +45,21 @@ typedef struct {
     size_t queued_bytes;
 } client;
 
+typedef struct {
+    size_t current_connections;
+    size_t total_connections;
+    size_t channel_messages;
+    size_t direct_messages;
+    size_t malformed_frames;
+    size_t queue_disconnects;
+} server_stats;
+
 static client clients[CW_MAX_CLIENTS];
 static char channels[CW_MAX_CHANNELS][CW_CHANNEL_CAP + 1];
 static size_t channel_count;
+static size_t max_queue_bytes = CW_DEFAULT_MAX_QUEUE_BYTES;
+static int client_send_buffer_bytes;
+static server_stats stats;
 static volatile sig_atomic_t running = 1;
 
 static void handle_signal(int signo) {
@@ -72,6 +84,24 @@ static int set_nonblocking(int fd) {
     return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
+static size_t parse_size_env(const char *name, size_t fallback) {
+    const char *value = getenv(name);
+    char *end = NULL;
+    unsigned long parsed;
+
+    if (value == NULL || value[0] == '\0') {
+        return fallback;
+    }
+
+    parsed = strtoul(value, &end, 10);
+    if (end == value || *end != '\0' || parsed == 0) {
+        log_line("ignoring invalid %s=%s", name, value);
+        return fallback;
+    }
+
+    return (size_t)parsed;
+}
+
 static void init_clients(void) {
     for (size_t i = 0; i < CW_MAX_CLIENTS; i++) {
         clients[i].fd = -1;
@@ -93,6 +123,9 @@ static void free_queue(client *c) {
 static void reset_client(client *c) {
     if (c->fd >= 0) {
         close(c->fd);
+        if (stats.current_connections > 0) {
+            stats.current_connections--;
+        }
     }
     free_queue(c);
     memset(c, 0, sizeof(*c));
@@ -148,7 +181,7 @@ static int enqueue_payload(client *c, uint8_t type, const uint8_t *payload, size
     if (payload_len > CW_MAX_PAYLOAD_SIZE) {
         return -1;
     }
-    if (c->queued_bytes + CW_FRAME_HEADER_SIZE + payload_len > CW_MAX_QUEUE_BYTES) {
+    if (c->queued_bytes + CW_FRAME_HEADER_SIZE + payload_len > max_queue_bytes) {
         return -1;
     }
 
@@ -199,6 +232,7 @@ static void disconnect_client(client *c, const char *reason) {
 
 static int safe_enqueue_text(client *c, uint8_t type, const char *text) {
     if (enqueue_text(c, type, text) != 0) {
+        stats.queue_disconnects++;
         disconnect_client(c, "outgoing queue overflow");
         return -1;
     }
@@ -235,10 +269,13 @@ static void broadcast_chat(client *sender, const char *text) {
         client *target = &clients[i];
         if (target->fd >= 0 && target->registered && target->joined[channel_idx]) {
             if (enqueue_payload(target, CW_MSG_CHAT, payload, offset) != 0) {
+                stats.queue_disconnects++;
                 disconnect_client(target, "outgoing queue overflow");
             }
         }
     }
+
+    stats.channel_messages++;
 }
 
 static void send_who(client *c) {
@@ -283,6 +320,41 @@ static void send_list(client *c) {
     }
 
     safe_enqueue_text(c, CW_MSG_LIST_RESP, payload);
+}
+
+static void send_stats(client *c) {
+    char payload[CW_MAX_PAYLOAD_SIZE];
+    size_t registered_clients = 0;
+    int written;
+
+    for (size_t i = 0; i < CW_MAX_CLIENTS; i++) {
+        if (clients[i].fd >= 0 && clients[i].registered) {
+            registered_clients++;
+        }
+    }
+
+    written = snprintf(payload,
+                       sizeof(payload),
+                       "{\"current_connections\":%zu,\"registered_clients\":%zu,"
+                       "\"total_connections\":%zu,\"channels\":%zu,"
+                       "\"channel_messages\":%zu,\"direct_messages\":%zu,"
+                       "\"malformed_frames\":%zu,\"queue_disconnects\":%zu,"
+                       "\"max_queue_bytes\":%zu}",
+                       stats.current_connections,
+                       registered_clients,
+                       stats.total_connections,
+                       channel_count,
+                       stats.channel_messages,
+                       stats.direct_messages,
+                       stats.malformed_frames,
+                       stats.queue_disconnects,
+                       max_queue_bytes);
+    if (written < 0 || (size_t)written >= sizeof(payload)) {
+        safe_enqueue_text(c, CW_MSG_ERROR, "stats response too large");
+        return;
+    }
+
+    safe_enqueue_text(c, CW_MSG_STATS_RESP, payload);
 }
 
 static int read_one_string_payload(const uint8_t *payload,
@@ -403,10 +475,12 @@ static void handle_dm(client *c, const uint8_t *payload, size_t payload_len) {
     {
         const char *values[] = { c->username, text };
         if (enqueue_strings(target, CW_MSG_DM_RECV, values, 2) != 0) {
+            stats.queue_disconnects++;
             disconnect_client(target, "outgoing queue overflow");
             return;
         }
     }
+    stats.direct_messages++;
     safe_enqueue_text(c, CW_MSG_OK, "direct message sent");
 }
 
@@ -477,6 +551,9 @@ static void handle_frame(client *c, uint8_t type, const uint8_t *payload, size_t
     case CW_MSG_QUIT:
         disconnect_client(c, "client quit");
         break;
+    case CW_MSG_STATS:
+        send_stats(c);
+        break;
     default:
         safe_enqueue_text(c, CW_MSG_ERROR, "unknown message type");
         break;
@@ -489,6 +566,7 @@ static int drain_input(client *c) {
         size_t frame_len;
 
         if (cw_parse_header(c->inbuf, c->inbuf_len, &header) != 0) {
+            stats.malformed_frames++;
             safe_enqueue_text(c, CW_MSG_ERROR, "malformed frame");
             return -1;
         }
@@ -521,6 +599,7 @@ static void read_from_client(client *c) {
 
         n = recv(c->fd, c->inbuf + c->inbuf_len, sizeof(c->inbuf) - c->inbuf_len, 0);
         if (n > 0) {
+            (void)n;
             c->inbuf_len += (size_t)n;
             if (drain_input(c) != 0) {
                 return;
@@ -640,6 +719,11 @@ static void accept_clients(int listener_fd) {
             }
         }
 
+        if (client_send_buffer_bytes > 0 &&
+            setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &client_send_buffer_bytes, sizeof(client_send_buffer_bytes)) != 0) {
+            log_line("warning: failed to set SO_SNDBUF on fd=%d", fd);
+        }
+
         if (slot == NULL || set_nonblocking(fd) != 0) {
             close(fd);
             continue;
@@ -647,6 +731,8 @@ static void accept_clients(int listener_fd) {
 
         memset(slot, 0, sizeof(*slot));
         slot->fd = fd;
+        stats.current_connections++;
+        stats.total_connections++;
         log_line("accepted fd=%d", fd);
     }
 }
@@ -676,6 +762,8 @@ int main(int argc, char **argv) {
     if (bind_host == NULL || bind_host[0] == '\0') {
         bind_host = "127.0.0.1";
     }
+    max_queue_bytes = parse_size_env("CW_MAX_QUEUE_BYTES", CW_DEFAULT_MAX_QUEUE_BYTES);
+    client_send_buffer_bytes = (int)parse_size_env("CW_CLIENT_SNDBUF", 0);
 
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
@@ -687,7 +775,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    log_line("channelwire server listening on %s:%d", bind_host, port);
+    log_line("channelwire server listening on %s:%d max_queue_bytes=%zu", bind_host, port, max_queue_bytes);
 
     while (running) {
         struct pollfd pfds[CW_MAX_CLIENTS + 1];
