@@ -60,6 +60,33 @@ def run(server: str) -> None:
                 assert health.status_code == 200
                 assert health.json()["core_port"] == port
 
+                register_resp = client.post(
+                    "/auth/register",
+                    json={"username": "loginuser", "password": "correct-horse-battery"},
+                )
+                assert register_resp.status_code == 200
+                assert register_resp.json()["access_token"]
+
+                duplicate_resp = client.post(
+                    "/auth/register",
+                    json={"username": "loginuser", "password": "correct-horse-battery"},
+                )
+                assert duplicate_resp.status_code == 409
+
+                bad_login = client.post(
+                    "/auth/login",
+                    json={"username": "loginuser", "password": "wrong-password"},
+                )
+                assert bad_login.status_code == 401
+
+                login_resp = client.post(
+                    "/auth/login",
+                    json={"username": "loginuser", "password": "correct-horse-battery"},
+                )
+                assert login_resp.status_code == 200
+                login_token = login_resp.json()["access_token"]
+                assert client.get("/stats", params={"token": login_token}).status_code == 200
+
                 token_resp = client.post("/auth/dev-token", json={"username": "webalice"})
                 assert token_resp.status_code == 200
                 token = token_resp.json()["access_token"]
@@ -91,6 +118,7 @@ def run(server: str) -> None:
 
                 persisted_users = client.get("/db/users", params={"token": token})
                 assert persisted_users.status_code == 200
+                assert all("password" not in user for user in persisted_users.json()["users"])
                 assert "webalice" in {
                     user["username"] for user in persisted_users.json()["users"]
                 }
@@ -112,7 +140,7 @@ def run(server: str) -> None:
                 assert stats.status_code == 200
                 stats_body = stats.json()
                 assert stats_body["type"] == "stats"
-                assert stats_body["users"] == 1
+                assert stats_body["users"] == 2
                 assert stats_body["channels"] == 1
                 assert stats_body["messages"] == 1
                 assert stats_body["channel_messages"] == 1

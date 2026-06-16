@@ -1,7 +1,7 @@
 import os
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, and_, create_engine, func, or_, select
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, and_, create_engine, func, inspect, or_, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 
@@ -20,6 +20,7 @@ class User(Base):
     __tablename__ = "users"
 
     username: Mapped[str] = mapped_column(String(32), primary_key=True)
+    password_hash: Mapped[str | None] = mapped_column(String(256), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
@@ -54,6 +55,12 @@ class Message(Base):
 
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
+    inspector = inspect(engine)
+    if "users" in inspector.get_table_names():
+        columns = {column["name"] for column in inspector.get_columns("users")}
+        if "password_hash" not in columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN password_hash VARCHAR(256)"))
 
 
 def session_scope() -> Session:
@@ -63,6 +70,28 @@ def session_scope() -> Session:
 def upsert_user(db: Session, username: str) -> None:
     if db.get(User, username) is None:
         db.add(User(username=username))
+
+
+def create_user(db: Session, username: str, password_hash: str) -> User:
+    if db.get(User, username) is not None:
+        raise ValueError("username already exists")
+    user = User(username=username, password_hash=password_hash)
+    db.add(user)
+    return user
+
+
+def set_user_password(db: Session, username: str, password_hash: str) -> User:
+    user = db.get(User, username)
+    if user is None:
+        user = User(username=username, password_hash=password_hash)
+        db.add(user)
+    else:
+        user.password_hash = password_hash
+    return user
+
+
+def get_user(db: Session, username: str) -> User | None:
+    return db.get(User, username)
 
 
 def ensure_channel(db: Session, channel_name: str) -> None:

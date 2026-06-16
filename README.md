@@ -135,7 +135,19 @@ Start the gateway:
 uvicorn gateway.app.main:app --reload --port 8000
 ```
 
-Create a development JWT:
+Register or log in to receive a JWT:
+
+```sh
+curl -X POST http://127.0.0.1:8000/auth/register \
+  -H 'content-type: application/json' \
+  -d '{"username":"alice","password":"correct-horse-battery"}'
+
+curl -X POST http://127.0.0.1:8000/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"username":"alice","password":"correct-horse-battery"}'
+```
+
+For quick local demos, create a development JWT without a password:
 
 ```sh
 curl -X POST http://127.0.0.1:8000/auth/dev-token \
@@ -186,10 +198,10 @@ npm --prefix frontend install
 npm --prefix frontend run dev
 ```
 
-The dashboard connects to `http://127.0.0.1:8000` by default. Set `VITE_GATEWAY_URL` before building if the gateway runs somewhere else. Its status panel shows gateway health, core address, persisted users/channels/messages, and local event counts.
+The dashboard connects to `http://127.0.0.1:8000` by default. Set `VITE_GATEWAY_URL` before building if the gateway runs somewhere else. It can register/login for a JWT, use a dev token for demos, connect to the WebSocket gateway, and show gateway health, core address, persisted users/channels/messages, and local event counts.
 
 ## Roadmap
 
-- Add stricter auth flows beyond development token issuance.
+- Add refresh-token/session management beyond short-lived bearer JWTs.
 - Expand the React dashboard with richer server monitoring.
 - Expand load tests for slow-reader backpressure behavior.

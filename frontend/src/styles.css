@@ -90,7 +90,7 @@ p {
   align-items: end;
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(160px, 220px) auto;
+  grid-template-columns: minmax(140px, 180px) minmax(140px, 180px) repeat(4, auto);
 }
 
 label span {

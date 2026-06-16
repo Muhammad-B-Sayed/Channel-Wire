@@ -64,6 +64,7 @@ const gatewayWs = gatewayHttp.replace(/^http/, "ws");
 
 function App() {
   const [username, setUsername] = useState("alice");
+  const [password, setPassword] = useState("");
   const [token, setToken] = useState("");
   const [channel, setChannel] = useState("general");
   const [message, setMessage] = useState("");
@@ -127,6 +128,24 @@ function App() {
     const body = await response.json();
     setToken(body.access_token);
     await refreshStats(body.access_token);
+    return body.access_token as string;
+  }
+
+  async function authenticate(path: "register" | "login") {
+    setError("");
+    const response = await fetch(`${gatewayHttp}/auth/${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+    if (!response.ok) {
+      setError(await response.text());
+      return "";
+    }
+    const body = await response.json();
+    setToken(body.access_token);
+    await refreshStats(body.access_token);
+    pushLine({ kind: "status", text: `${path === "register" ? "Registered" : "Logged in"} as ${username}` });
     return body.access_token as string;
   }
 
@@ -260,6 +279,27 @@ function App() {
             <span>Username</span>
             <input value={username} onChange={(event) => setUsername(event.target.value)} />
           </label>
+          <label>
+            <span>Password</span>
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="8+ chars"
+            />
+          </label>
+          <button type="button" className="iconButton" onClick={() => authenticate("register")}>
+            <LogIn size={18} />
+            Register
+          </button>
+          <button type="button" className="iconButton" onClick={() => authenticate("login")}>
+            <LogIn size={18} />
+            Login
+          </button>
+          <button type="button" className="iconButton" onClick={createToken}>
+            <LogIn size={18} />
+            Dev Token
+          </button>
           <button onClick={connected ? disconnect : connect}>
             {connected ? <Cable size={18} /> : <LogIn size={18} />}
             {connected ? "Disconnect" : "Connect"}

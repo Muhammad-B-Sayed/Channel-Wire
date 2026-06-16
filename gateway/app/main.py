@@ -1,6 +1,10 @@
 import asyncio
+import base64
+import hashlib
+import hmac
 import json
 import os
+import secrets
 import sys
 import time
 from pathlib import Path
@@ -40,7 +44,9 @@ from channelwire_client import (  # noqa: E402
 from gateway.app.db import (  # noqa: E402
     add_membership,
     channel_history,
+    create_user,
     direct_history,
+    get_user,
     init_db,
     list_channels,
     list_users,
@@ -76,6 +82,10 @@ class TokenRequest(BaseModel):
     username: str = Field(min_length=1, max_length=32, pattern=r"^[A-Za-z0-9_.-]+$")
 
 
+class AuthRequest(TokenRequest):
+    password: str = Field(min_length=8, max_length=128)
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -103,6 +113,30 @@ def create_token(username: str) -> str:
         JWT_SECRET,
         algorithm=JWT_ALGORITHM,
     )
+
+
+def hash_password(password: str, salt: bytes | None = None) -> str:
+    salt = salt or secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 210_000)
+    return "pbkdf2_sha256$210000${}${}".format(
+        base64.b64encode(salt).decode("ascii"),
+        base64.b64encode(digest).decode("ascii"),
+    )
+
+
+def verify_password(password: str, encoded: str | None) -> bool:
+    if not encoded:
+        return False
+    try:
+        algorithm, iterations, salt_b64, digest_b64 = encoded.split("$", 3)
+        if algorithm != "pbkdf2_sha256":
+            return False
+        salt = base64.b64decode(salt_b64)
+        expected = base64.b64decode(digest_b64)
+        actual = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, int(iterations))
+    except (ValueError, TypeError):
+        return False
+    return hmac.compare_digest(actual, expected)
 
 
 def verify_token(token: str) -> str:
@@ -212,6 +246,26 @@ async def dev_token(request: TokenRequest) -> TokenResponse:
     with session_scope() as db:
         upsert_user(db, request.username)
         db.commit()
+    return TokenResponse(access_token=create_token(request.username))
+
+
+@app.post("/auth/register", response_model=TokenResponse)
+async def register(request: AuthRequest) -> TokenResponse:
+    with session_scope() as db:
+        try:
+            create_user(db, request.username, hash_password(request.password))
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        db.commit()
+    return TokenResponse(access_token=create_token(request.username))
+
+
+@app.post("/auth/login", response_model=TokenResponse)
+async def login(request: AuthRequest) -> TokenResponse:
+    with session_scope() as db:
+        user = get_user(db, request.username)
+        if user is None or not verify_password(request.password, user.password_hash):
+            raise HTTPException(status_code=401, detail="invalid username or password")
     return TokenResponse(access_token=create_token(request.username))
 
 
