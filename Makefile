@@ -18,7 +18,7 @@ CORE_BIN := $(BUILD_DIR)/channelwire-server
 CORE_SRCS := core/src/server.c core/src/protocol.c
 CORE_OBJS := $(CORE_SRCS:%.c=$(OBJ_DIR)/%.o)
 
-.PHONY: all clean test test-load benchmark test-lifecycle test-backpressure test-malformed test-gateway test-compose frontend-build sanitize docker-build docker-up docker-down FORCE
+.PHONY: all clean test test-load benchmark test-lifecycle test-backpressure test-malformed test-gateway test-compose migrate-db frontend-build sanitize docker-build docker-up docker-down FORCE
 
 all: $(CORE_BIN)
 
@@ -58,6 +58,9 @@ test-gateway: all
 
 test-compose:
 	python3 tests/compose_smoke_test.py
+
+migrate-db:
+	python3 -m alembic -c gateway/alembic.ini upgrade head
 
 frontend-build:
 	npm --prefix frontend install

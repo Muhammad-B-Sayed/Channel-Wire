@@ -95,6 +95,7 @@ make test-backpressure
 make test-malformed
 make test-compose
 make benchmark
+make migrate-db
 make sanitize
 ```
 
@@ -111,6 +112,8 @@ make sanitize
 `make test-malformed` sends invalid usernames, truncated string payloads, unknown message types, and oversized frames, then verifies error responses and server health afterward.
 
 `make test-compose` builds and runs the full Docker Compose stack, then verifies the gateway, PostgreSQL-backed auth/stats APIs, C core stats through the gateway, and the React dashboard HTTP surface.
+
+`make migrate-db` applies the Alembic schema migrations to `CHANNELWIRE_DATABASE_URL`, or to `sqlite:///./channelwire.db` by default.
 
 ## Docker
 
@@ -181,7 +184,9 @@ Connect a WebSocket to `/ws?token=...`. WebSocket commands are JSON objects:
 {"type":"dm","to":"bob","text":"private hello"}
 ```
 
-Gateway WebSocket traffic is persisted through SQLAlchemy. Docker Compose uses PostgreSQL; local smoke tests use an isolated SQLite database. Retrieve channel history with:
+Gateway WebSocket traffic is persisted through SQLAlchemy. Docker Compose uses PostgreSQL; local smoke tests use an isolated SQLite database. Schema changes are managed with Alembic migrations under `gateway/alembic`. The gateway runs migrations at startup, and they can also be applied manually with `make migrate-db`.
+
+Retrieve channel history with:
 
 ```sh
 curl 'http://127.0.0.1:8000/history/general?token=TOKEN'

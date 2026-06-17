@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, and_, create_engine, func, inspect, or_, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
@@ -53,7 +54,28 @@ class Message(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
 
 
-def init_db() -> None:
+def has_unversioned_schema() -> bool:
+    tables = set(inspect(engine).get_table_names())
+    model_tables = set(Base.metadata.tables)
+    return "alembic_version" not in tables and model_tables.issubset(tables)
+
+
+def migrate_db() -> None:
+    from alembic import command
+    from alembic.config import Config
+
+    config_path = Path(__file__).resolve().parents[1] / "alembic.ini"
+    config = Config(str(config_path))
+    config.set_main_option("script_location", str(Path(__file__).resolve().parents[1] / "alembic"))
+    config.set_main_option("sqlalchemy.url", DATABASE_URL)
+    if has_unversioned_schema():
+        create_schema_direct()
+        command.stamp(config, "head")
+        return
+    command.upgrade(config, "head")
+
+
+def create_schema_direct() -> None:
     Base.metadata.create_all(bind=engine)
     inspector = inspect(engine)
     if "users" in inspector.get_table_names():
@@ -61,6 +83,16 @@ def init_db() -> None:
         if "password_hash" not in columns:
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE users ADD COLUMN password_hash VARCHAR(256)"))
+
+
+def init_db() -> None:
+    if os.getenv("CHANNELWIRE_DISABLE_ALEMBIC") == "1":
+        create_schema_direct()
+        return
+    try:
+        migrate_db()
+    except ModuleNotFoundError:
+        create_schema_direct()
 
 
 def session_scope() -> Session:

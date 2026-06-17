@@ -39,6 +39,7 @@ Evidence:
 - FastAPI gateway: `gateway/app/main.py`
 - JWT register/login auth with salted PBKDF2 password hashes and bearer-token REST support: `/auth/register`, `/auth/login`, `hash_password`, `verify_password`, `verify_request_token`
 - PostgreSQL/SQLAlchemy persistence models: `gateway/app/db.py`
+- Alembic schema migrations for users, channels, memberships, and messages: `gateway/alembic/versions/0001_initial_schema.py`
 - Persisted users, channels, memberships, channel messages, and direct messages: `User`, `Channel`, `Membership`, `Message`
 - REST APIs for health, stats, persisted directories, histories, and core stats: `gateway/app/main.py`
 - WebSocket bridge from JSON commands to C binary frames: `/ws`
@@ -51,6 +52,7 @@ Verification:
 ```sh
 python3 -m pip install -r gateway/requirements.txt
 make test-gateway
+make migrate-db
 npm --prefix frontend run build
 npm --prefix frontend audit --audit-level=high
 ```
@@ -87,4 +89,3 @@ These are not required to truthfully support the current resume bullets, but wou
 
 - Larger soak tests.
 - Refresh-token or session management beyond bearer JWTs.
-- Database migrations through Alembic instead of the current lightweight startup migration.
