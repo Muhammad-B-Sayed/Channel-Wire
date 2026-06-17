@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: channelwire
       POSTGRES_PASSWORD: channelwire
     ports:
-      - "5432:5432"
+      - "${CHANNELWIRE_POSTGRES_PUBLISHED_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -21,7 +21,7 @@ services:
     environment:
       CW_BIND_HOST: 0.0.0.0
     ports:
-      - "5555:5555"
+      - "${CHANNELWIRE_CORE_PUBLISHED_PORT:-5555}:5555"
     healthcheck:
       test: ["CMD-SHELL", "nc -z 127.0.0.1 5555"]
       interval: 5s

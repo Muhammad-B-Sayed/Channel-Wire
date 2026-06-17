@@ -61,7 +61,7 @@ npm --prefix frontend audit --audit-level=high
 
 ## Production-Style Workflow
 
-Status: implemented, with one local environment caveat.
+Status: implemented and tested.
 
 Evidence:
 
@@ -84,8 +84,6 @@ make benchmark
 make soak
 make test-compose
 ```
-
-Local caveat: `make test-compose` requires a running Docker daemon. In the current local environment, Docker API access is unavailable, so this gate is wired for CI/runtime environments where Docker is available.
 
 ## Remaining Nice-to-Haves
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import os
 import subprocess
 import sys
 import time
@@ -33,7 +34,7 @@ def wait_for_json(url: str, timeout_seconds: float = 90) -> dict:
     while time.time() < deadline:
         try:
             return request_json("GET", url)
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
             last_error = exc
             time.sleep(1)
     raise AssertionError(f"timed out waiting for {url}: {last_error}")
@@ -48,7 +49,7 @@ def wait_for_frontend(url: str, timeout_seconds: float = 90) -> str:
                 text = response.read().decode("utf-8")
                 if "ChannelWire" in text:
                     return text
-        except (urllib.error.URLError, TimeoutError) as exc:
+        except (OSError, urllib.error.URLError, TimeoutError) as exc:
             last_error = exc
         time.sleep(1)
     raise AssertionError(f"timed out waiting for frontend {url}: {last_error}")
@@ -56,6 +57,8 @@ def wait_for_frontend(url: str, timeout_seconds: float = 90) -> str:
 
 def main() -> None:
     project = "channelwire-smoke"
+    os.environ["CHANNELWIRE_CORE_PUBLISHED_PORT"] = "0"
+    os.environ["CHANNELWIRE_POSTGRES_PUBLISHED_PORT"] = "0"
     compose = ["docker", "compose", "-p", project]
     try:
         run_cmd([*compose, "up", "--build", "-d"])
