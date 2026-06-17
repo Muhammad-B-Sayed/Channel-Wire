@@ -23,6 +23,8 @@ jobs:
         run: make test-malformed
       - name: Install gateway dependencies
         run: python3 -m pip install -r gateway/requirements.txt
+      - name: Verify gateway migrations
+        run: make test-migrations
       - name: Run gateway smoke test
         run: make test-gateway
       - name: Sanitizer build

@@ -46,12 +46,14 @@ Evidence:
 - React + TypeScript dashboard: `frontend/src/main.tsx`
 - Dashboard monitoring: gateway health, core stats, persisted users/channels/memberships/messages, queue disconnects, live users/channels, message-mix meters, queue-pressure meter, and rolling trend charts
 - Gateway smoke coverage for browser-style channel broadcast and direct messaging: `tests/gateway_smoke_test.py`
+- Migration coverage for fresh Alembic upgrades and legacy schema adoption: `tests/migration_test.py`
 
 Verification:
 
 ```sh
 python3 -m pip install -r gateway/requirements.txt
 make test-gateway
+make test-migrations
 make migrate-db
 npm --prefix frontend run build
 npm --prefix frontend audit --audit-level=high

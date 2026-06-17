@@ -18,7 +18,7 @@ CORE_BIN := $(BUILD_DIR)/channelwire-server
 CORE_SRCS := core/src/server.c core/src/protocol.c
 CORE_OBJS := $(CORE_SRCS:%.c=$(OBJ_DIR)/%.o)
 
-.PHONY: all clean test test-load benchmark test-lifecycle test-backpressure test-malformed test-gateway test-compose migrate-db frontend-build sanitize docker-build docker-up docker-down FORCE
+.PHONY: all clean test test-load benchmark test-lifecycle test-backpressure test-malformed test-gateway test-migrations test-compose migrate-db frontend-build sanitize docker-build docker-up docker-down FORCE
 
 all: $(CORE_BIN)
 
@@ -55,6 +55,9 @@ test-malformed: all
 
 test-gateway: all
 	python3 tests/gateway_smoke_test.py --server ./$(CORE_BIN)
+
+test-migrations:
+	python3 tests/migration_test.py
 
 test-compose:
 	python3 tests/compose_smoke_test.py
