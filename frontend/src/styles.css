@@ -351,6 +351,51 @@ dd {
   margin-top: 14px;
 }
 
+.trendGrid {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.trendGrid div {
+  background: #f5f7f8;
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.trendGrid span {
+  color: #5a6973;
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.sparkline {
+  display: block;
+  height: 42px;
+  width: 100%;
+}
+
+.sparkline polyline {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+}
+
+.messageTrend polyline {
+  stroke: #1d4f73;
+}
+
+.queueTrend polyline {
+  stroke: #bd3f2b;
+}
+
+.malformedTrend polyline {
+  stroke: #8a5a12;
+}
+
 @media (max-width: 980px) {
   .topbar,
   .workspace {

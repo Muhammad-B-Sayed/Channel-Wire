@@ -43,7 +43,7 @@ Evidence:
 - REST APIs for health, stats, persisted directories, histories, and core stats: `gateway/app/main.py`
 - WebSocket bridge from JSON commands to C binary frames: `/ws`
 - React + TypeScript dashboard: `frontend/src/main.tsx`
-- Dashboard monitoring: gateway health, core stats, persisted users/channels/memberships/messages, queue disconnects, live users/channels, message-mix meters, queue-pressure meter
+- Dashboard monitoring: gateway health, core stats, persisted users/channels/memberships/messages, queue disconnects, live users/channels, message-mix meters, queue-pressure meter, and rolling trend charts
 - Gateway smoke coverage for browser-style channel broadcast and direct messaging: `tests/gateway_smoke_test.py`
 
 Verification:
@@ -87,5 +87,4 @@ These are not required to truthfully support the current resume bullets, but wou
 
 - Larger soak tests.
 - Refresh-token or session management beyond bearer JWTs.
-- Dashboard time-series charts for message rate, queue pressure, and malformed traffic over time.
 - Database migrations through Alembic instead of the current lightweight startup migration.

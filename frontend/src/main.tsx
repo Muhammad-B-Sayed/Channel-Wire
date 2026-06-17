@@ -69,8 +69,37 @@ type PersistedChannel = {
   created_at: string;
 };
 
+type MonitorSample = {
+  id: number;
+  messages: number;
+  queuePressure: number;
+  malformedFrames: number;
+};
+
 const gatewayHttp = import.meta.env.VITE_GATEWAY_URL ?? "http://127.0.0.1:8000";
 const gatewayWs = gatewayHttp.replace(/^http/, "ws");
+
+function Sparkline({ values, className }: { values: number[]; className: string }) {
+  const width = 160;
+  const height = 42;
+  const max = Math.max(1, ...values);
+  const points =
+    values.length === 0
+      ? ""
+      : values
+          .map((value, index) => {
+            const x = values.length === 1 ? width : (index / (values.length - 1)) * width;
+            const y = height - (value / max) * (height - 4) - 2;
+            return `${x.toFixed(1)},${y.toFixed(1)}`;
+          })
+          .join(" ");
+
+  return (
+    <svg className={`sparkline ${className}`} viewBox={`0 0 ${width} ${height}`} role="img" aria-hidden="true">
+      <polyline points={points} />
+    </svg>
+  );
+}
 
 function App() {
   const [username, setUsername] = useState("alice");
@@ -87,6 +116,7 @@ function App() {
   const [health, setHealth] = useState<Health | null>(null);
   const [platformStats, setPlatformStats] = useState<PlatformStats | null>(null);
   const [coreStats, setCoreStats] = useState<CoreStats | null>(null);
+  const [monitorSamples, setMonitorSamples] = useState<MonitorSample[]>([]);
   const [persistedUsers, setPersistedUsers] = useState<PersistedUser[]>([]);
   const [persistedChannels, setPersistedChannels] = useState<PersistedChannel[]>([]);
   const [error, setError] = useState("");
@@ -118,9 +148,31 @@ function App() {
       totalConnections
     };
   }, [coreStats, platformStats]);
+  const monitorSeries = useMemo(
+    () => ({
+      messages: monitorSamples.map((item) => item.messages),
+      queuePressure: monitorSamples.map((item) => item.queuePressure),
+      malformedFrames: monitorSamples.map((item) => item.malformedFrames)
+    }),
+    [monitorSamples]
+  );
 
   function pushLine(line: Omit<ChatLine, "id">) {
     setMessages((current) => [...current.slice(-199), { ...line, id: Date.now() + Math.random() }]);
+  }
+
+  function recordMonitorSample(platform: PlatformStats, core: CoreStats) {
+    const queuePressure =
+      core.total_connections > 0 ? Math.min(100, (core.queue_disconnects / core.total_connections) * 100) : 0;
+    setMonitorSamples((current) => [
+      ...current.slice(-29),
+      {
+        id: Date.now(),
+        messages: platform.messages,
+        queuePressure,
+        malformedFrames: core.malformed_frames
+      }
+    ]);
   }
 
   async function refreshHealth() {
@@ -135,14 +187,23 @@ function App() {
     if (!accessToken) {
       return;
     }
+    let nextPlatformStats: PlatformStats | null = null;
+    let nextCoreStats: CoreStats | null = null;
+
     const response = await fetch(`${gatewayHttp}/stats?token=${encodeURIComponent(accessToken)}`);
     if (response.ok) {
-      setPlatformStats(await response.json());
+      nextPlatformStats = await response.json();
+      setPlatformStats(nextPlatformStats);
     }
 
     const coreResponse = await fetch(`${gatewayHttp}/core-stats?token=${encodeURIComponent(accessToken)}`);
     if (coreResponse.ok) {
-      setCoreStats(await coreResponse.json());
+      nextCoreStats = await coreResponse.json();
+      setCoreStats(nextCoreStats);
+    }
+
+    if (nextPlatformStats && nextCoreStats) {
+      recordMonitorSample(nextPlatformStats, nextCoreStats);
     }
 
     const usersResponse = await fetch(`${gatewayHttp}/db/users?token=${encodeURIComponent(accessToken)}`);
@@ -556,6 +617,20 @@ function App() {
               <dt>Connections</dt>
               <dd>{monitoring.totalConnections}</dd>
             </dl>
+            <div className="trendGrid" aria-label="Monitoring trends">
+              <div>
+                <span>Messages</span>
+                <Sparkline values={monitorSeries.messages} className="messageTrend" />
+              </div>
+              <div>
+                <span>Queue</span>
+                <Sparkline values={monitorSeries.queuePressure} className="queueTrend" />
+              </div>
+              <div>
+                <span>Malformed</span>
+                <Sparkline values={monitorSeries.malformedFrames} className="malformedTrend" />
+              </div>
+            </div>
           </div>
         </aside>
       </section>
