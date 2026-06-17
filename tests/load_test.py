@@ -80,7 +80,12 @@ def read_stats(port: int) -> dict[str, int]:
     raise AssertionError("did not receive load-test stats")
 
 
-def run(server: str, clients: int) -> None:
+def write_report(report_path: Path, report: dict[str, object]) -> None:
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def run(server: str, clients: int, report_path: Path | None = None) -> None:
     port = pick_port()
     proc = subprocess.Popen(
         [server, str(port)],
@@ -117,6 +122,14 @@ def run(server: str, clients: int) -> None:
         stats = read_stats(port)
         assert stats["channel_messages"] >= clients, stats
         messages_per_second = clients / elapsed if elapsed > 0 else 0
+        report = {
+            "clients": clients,
+            "elapsed_seconds": round(elapsed, 6),
+            "client_messages_per_second": round(messages_per_second, 3),
+            "server_channel_messages": stats["channel_messages"],
+            "server_total_connections": stats["total_connections"],
+            "server_stats": stats,
+        }
         print(
             "load-test summary: "
             f"clients={clients} elapsed={elapsed:.3f}s "
@@ -124,6 +137,9 @@ def run(server: str, clients: int) -> None:
             f"server_channel_messages={stats['channel_messages']} "
             f"total_connections={stats['total_connections']}"
         )
+        if report_path is not None:
+            write_report(report_path, report)
+            print(f"load-test report: {report_path}")
     finally:
         proc.terminate()
         try:
@@ -140,8 +156,9 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--server", required=True)
     parser.add_argument("--clients", type=int, default=24)
+    parser.add_argument("--report", type=Path)
     args = parser.parse_args()
-    run(os.path.abspath(args.server), args.clients)
+    run(os.path.abspath(args.server), args.clients, args.report)
 
 
 if __name__ == "__main__":

@@ -68,12 +68,14 @@ Evidence:
 - GitHub Actions CI: `.github/workflows/ci.yml`
 - Sanitizer-enabled C builds: `make SANITIZE=1 ...`
 - Automated integration/load/lifecycle/backpressure/malformed/gateway/frontend tests: `tests/`, `Makefile`
+- Load-test benchmark artifact: `docs/benchmarks/latest-load.json`
 - Compose runtime smoke test: `tests/compose_smoke_test.py`
 
 Verification:
 
 ```sh
 docker compose config
+make benchmark
 make test-compose
 ```
 
@@ -83,7 +85,7 @@ Local caveat: `make test-compose` requires a running Docker daemon. In the curre
 
 These are not required to truthfully support the current resume bullets, but would make the project stronger:
 
-- Larger soak tests and benchmark artifacts.
+- Larger soak tests.
 - Refresh-token or session management beyond bearer JWTs.
 - Dashboard time-series charts for message rate, queue pressure, and malformed traffic over time.
 - Database migrations through Alembic instead of the current lightweight startup migration.
