@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import jwt
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -153,6 +153,14 @@ def verify_token(token: str) -> str:
     return username
 
 
+def verify_request_token(token: str | None = None, authorization: str | None = None) -> str:
+    if authorization is not None and authorization.lower().startswith("bearer "):
+        token = authorization[7:].strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="missing token")
+    return verify_token(token)
+
+
 async def core_send(writer: asyncio.StreamWriter, msg_type: int, payload: bytes = b"") -> None:
     writer.write(encode_frame(msg_type, payload))
     await writer.drain()
@@ -272,8 +280,8 @@ async def login(request: AuthRequest) -> TokenResponse:
 
 
 @app.get("/channels")
-async def channels(token: str) -> dict[str, Any]:
-    username = verify_token(token)
+async def channels(token: str | None = None, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    username = verify_request_token(token, authorization)
     reader, writer = await open_registered_core(username)
     try:
         await core_send(writer, LIST)
@@ -289,8 +297,8 @@ async def channels(token: str) -> dict[str, Any]:
 
 
 @app.get("/db/users")
-async def persisted_users(token: str) -> dict[str, Any]:
-    verify_token(token)
+async def persisted_users(token: str | None = None, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    verify_request_token(token, authorization)
     with session_scope() as db:
         users = list_users(db)
         return {
@@ -303,8 +311,8 @@ async def persisted_users(token: str) -> dict[str, Any]:
 
 
 @app.get("/db/channels")
-async def persisted_channels(token: str) -> dict[str, Any]:
-    verify_token(token)
+async def persisted_channels(token: str | None = None, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    verify_request_token(token, authorization)
     with session_scope() as db:
         channels = list_channels(db)
         return {
@@ -317,8 +325,12 @@ async def persisted_channels(token: str) -> dict[str, Any]:
 
 
 @app.get("/db/channels/{channel_name}/members")
-async def persisted_channel_members(channel_name: str, token: str) -> dict[str, Any]:
-    verify_token(token)
+async def persisted_channel_members(
+    channel_name: str,
+    token: str | None = None,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    verify_request_token(token, authorization)
     with session_scope() as db:
         members = channel_members(db, channel_name)
         return {
@@ -334,10 +346,11 @@ async def persisted_channel_members(channel_name: str, token: str) -> dict[str, 
 @app.get("/history/{channel_name}")
 async def history(
     channel_name: str,
-    token: str,
+    token: str | None = None,
+    authorization: str | None = Header(default=None),
     limit: int = Query(default=50, ge=1, le=200),
 ) -> dict[str, Any]:
-    verify_token(token)
+    verify_request_token(token, authorization)
     with session_scope() as db:
         messages = channel_history(db, channel_name, limit)
         return {
@@ -358,10 +371,11 @@ async def history(
 @app.get("/history/dm/{other_username}")
 async def dm_history(
     other_username: str,
-    token: str,
+    token: str | None = None,
+    authorization: str | None = Header(default=None),
     limit: int = Query(default=50, ge=1, le=200),
 ) -> dict[str, Any]:
-    username = verify_token(token)
+    username = verify_request_token(token, authorization)
     with session_scope() as db:
         messages = direct_history(db, username, other_username, limit)
         return {
@@ -381,15 +395,15 @@ async def dm_history(
 
 
 @app.get("/stats")
-async def stats(token: str) -> dict[str, Any]:
-    verify_token(token)
+async def stats(token: str | None = None, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    verify_request_token(token, authorization)
     with session_scope() as db:
         return {"type": "stats", **stats_snapshot(db)}
 
 
 @app.get("/core-stats")
-async def core_stats(token: str) -> dict[str, Any]:
-    username = verify_token(token)
+async def core_stats(token: str | None = None, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    username = verify_request_token(token, authorization)
     reader, writer = await open_registered_core(username)
     try:
         await core_send(writer, STATS)

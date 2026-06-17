@@ -164,7 +164,13 @@ curl -X POST http://127.0.0.1:8000/auth/dev-token \
   -d '{"username":"alice"}'
 ```
 
-Use the returned token with `GET /channels?token=...` or connect a WebSocket to `/ws?token=...`. WebSocket commands are JSON objects:
+Use the returned token as a bearer token for REST APIs, or as the `token` query parameter for WebSocket connections:
+
+```sh
+curl -H "authorization: Bearer TOKEN" http://127.0.0.1:8000/stats
+```
+
+Connect a WebSocket to `/ws?token=...`. WebSocket commands are JSON objects:
 
 ```json
 {"type":"join","channel":"general"}

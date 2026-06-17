@@ -97,6 +97,10 @@ def run(server: str) -> None:
                 assert login_resp.status_code == 200
                 login_token = login_resp.json()["access_token"]
                 assert client.get("/stats", params={"token": login_token}).status_code == 200
+                bearer_headers = {"authorization": f"Bearer {login_token}"}
+                assert client.get("/stats", headers=bearer_headers).status_code == 200
+                assert client.get("/db/users", headers=bearer_headers).status_code == 200
+                assert client.get("/stats").status_code == 401
 
                 token_resp = client.post("/auth/dev-token", json={"username": "webalice"})
                 assert token_resp.status_code == 200

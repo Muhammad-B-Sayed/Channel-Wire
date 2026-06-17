@@ -37,7 +37,7 @@ Status: implemented for gateway traffic.
 Evidence:
 
 - FastAPI gateway: `gateway/app/main.py`
-- JWT register/login auth with salted PBKDF2 password hashes: `/auth/register`, `/auth/login`, `hash_password`, `verify_password`
+- JWT register/login auth with salted PBKDF2 password hashes and bearer-token REST support: `/auth/register`, `/auth/login`, `hash_password`, `verify_password`, `verify_request_token`
 - PostgreSQL/SQLAlchemy persistence models: `gateway/app/db.py`
 - Persisted users, channels, memberships, channel messages, and direct messages: `User`, `Channel`, `Membership`, `Message`
 - REST APIs for health, stats, persisted directories, histories, and core stats: `gateway/app/main.py`
