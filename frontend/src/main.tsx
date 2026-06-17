@@ -100,6 +100,24 @@ function App() {
     }),
     [messages]
   );
+  const monitoring = useMemo(() => {
+    const storedMessages = platformStats?.messages ?? 0;
+    const channelMessages = platformStats?.channel_messages ?? 0;
+    const directMessages = platformStats?.direct_messages ?? 0;
+    const queueDrops = coreStats?.queue_disconnects ?? 0;
+    const totalConnections = coreStats?.total_connections ?? 0;
+    const queuePressure = totalConnections > 0 ? Math.min(100, (queueDrops / totalConnections) * 100) : 0;
+    const channelShare = storedMessages > 0 ? Math.min(100, (channelMessages / storedMessages) * 100) : 0;
+    const directShare = storedMessages > 0 ? Math.min(100, (directMessages / storedMessages) * 100) : 0;
+
+    return {
+      queuePressure,
+      channelShare,
+      directShare,
+      malformedFrames: coreStats?.malformed_frames ?? 0,
+      totalConnections
+    };
+  }, [coreStats, platformStats]);
 
   function pushLine(line: Omit<ChatLine, "id">) {
     setMessages((current) => [...current.slice(-199), { ...line, id: Date.now() + Math.random() }]);
@@ -499,6 +517,45 @@ function App() {
               <strong>{platformStats?.direct_messages ?? stats.direct}</strong>
               <span>Stored Direct</span>
             </div>
+          </div>
+          <div className="panel">
+            <div className="panelTitle">
+              <Activity size={18} />
+              Traffic Monitor
+            </div>
+            <div className="meterGroup">
+              <div className="meterLabel">
+                <span>Channel share</span>
+                <strong>{monitoring.channelShare.toFixed(0)}%</strong>
+              </div>
+              <div className="meterTrack">
+                <div className="meterFill channelMeter" style={{ width: `${monitoring.channelShare}%` }} />
+              </div>
+            </div>
+            <div className="meterGroup">
+              <div className="meterLabel">
+                <span>Direct share</span>
+                <strong>{monitoring.directShare.toFixed(0)}%</strong>
+              </div>
+              <div className="meterTrack">
+                <div className="meterFill directMeter" style={{ width: `${monitoring.directShare}%` }} />
+              </div>
+            </div>
+            <div className="meterGroup">
+              <div className="meterLabel">
+                <span>Queue pressure</span>
+                <strong>{monitoring.queuePressure.toFixed(0)}%</strong>
+              </div>
+              <div className="meterTrack">
+                <div className="meterFill pressureMeter" style={{ width: `${monitoring.queuePressure}%` }} />
+              </div>
+            </div>
+            <dl className="compactStats">
+              <dt>Malformed</dt>
+              <dd>{monitoring.malformedFrames}</dd>
+              <dt>Connections</dt>
+              <dd>{monitoring.totalConnections}</dd>
+            </dl>
           </div>
         </aside>
       </section>
