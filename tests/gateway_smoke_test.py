@@ -194,6 +194,32 @@ def run(server: str) -> None:
                     assert alice_ws.receive_json() == {"type": "ready", "username": "webalice"}
                     with client.websocket_connect(f"/ws?token={bob_token}") as bob_ws:
                         assert bob_ws.receive_json() == {"type": "ready", "username": "webbob"}
+                        alice_ws.send_json({"type": "join", "channel": "browser-room"})
+                        assert receive_type(alice_ws, "ok") == {
+                            "type": "ok",
+                            "message": "joined browser-room",
+                        }
+                        bob_ws.send_json({"type": "join", "channel": "browser-room"})
+                        assert receive_type(bob_ws, "ok") == {
+                            "type": "ok",
+                            "message": "joined browser-room",
+                        }
+                        alice_ws.send_json({"type": "say", "text": "shared browser channel"})
+                        expected_chat = {
+                            "type": "chat",
+                            "channel": "browser-room",
+                            "sender": "webalice",
+                            "text": "shared browser channel",
+                        }
+                        assert receive_type(alice_ws, "chat") == expected_chat
+                        assert receive_type(bob_ws, "chat") == expected_chat
+                        alice_ws.send_json({"type": "quit"})
+                        bob_ws.send_json({"type": "quit"})
+
+                with client.websocket_connect(f"/ws?token={token}") as alice_ws:
+                    assert alice_ws.receive_json() == {"type": "ready", "username": "webalice"}
+                    with client.websocket_connect(f"/ws?token={bob_token}") as bob_ws:
+                        assert bob_ws.receive_json() == {"type": "ready", "username": "webbob"}
                         alice_ws.send_json({"type": "dm", "to": "webbob", "text": "private browser hello"})
                         assert receive_type(alice_ws, "ok") == {
                             "type": "ok",

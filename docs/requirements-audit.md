@@ -44,6 +44,7 @@ Evidence:
 - WebSocket bridge from JSON commands to C binary frames: `/ws`
 - React + TypeScript dashboard: `frontend/src/main.tsx`
 - Dashboard monitoring: gateway health, core stats, persisted users/channels/memberships/messages, queue disconnects, live users/channels, message-mix meters, queue-pressure meter
+- Gateway smoke coverage for browser-style channel broadcast and direct messaging: `tests/gateway_smoke_test.py`
 
 Verification:
 
