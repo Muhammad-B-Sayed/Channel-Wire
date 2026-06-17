@@ -73,7 +73,7 @@ Evidence:
 - Sanitizer-enabled C builds: `make SANITIZE=1 ...`
 - Automated integration/load/lifecycle/backpressure/malformed/gateway/frontend tests: `tests/`, `Makefile`
 - Load-test benchmark artifact: `docs/benchmarks/latest-load.json`
-- Compose runtime smoke test: `tests/compose_smoke_test.py`
+- Compose runtime smoke test with direct PostgreSQL schema/Alembic checks: `tests/compose_smoke_test.py`
 
 Verification:
 

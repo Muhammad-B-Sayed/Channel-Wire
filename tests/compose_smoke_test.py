@@ -12,6 +12,10 @@ def run_cmd(args: list[str]) -> None:
     subprocess.run(args, check=True)
 
 
+def capture_cmd(args: list[str]) -> str:
+    return subprocess.check_output(args, text=True).strip()
+
+
 def request_json(method: str, url: str, body: dict | None = None) -> dict:
     data = None
     headers = {}
@@ -86,6 +90,44 @@ def main() -> None:
 
         users = request_json("GET", f"http://127.0.0.1:8000/db/users?{query}")
         assert username in {user["username"] for user in users["users"]}, users
+
+        alembic_version = capture_cmd(
+            [
+                *compose,
+                "exec",
+                "-T",
+                "postgres",
+                "psql",
+                "-U",
+                "channelwire",
+                "-d",
+                "channelwire",
+                "-tAc",
+                "select version_num from alembic_version",
+            ]
+        )
+        assert alembic_version == "0001_initial_schema", alembic_version
+
+        table_count = capture_cmd(
+            [
+                *compose,
+                "exec",
+                "-T",
+                "postgres",
+                "psql",
+                "-U",
+                "channelwire",
+                "-d",
+                "channelwire",
+                "-tAc",
+                (
+                    "select count(*) from information_schema.tables "
+                    "where table_schema = 'public' "
+                    "and table_name in ('users', 'channels', 'memberships', 'messages')"
+                ),
+            ]
+        )
+        assert table_count == "4", table_count
 
         wait_for_frontend("http://127.0.0.1:3000/")
     finally:

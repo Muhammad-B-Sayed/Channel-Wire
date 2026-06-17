@@ -114,7 +114,7 @@ make sanitize
 
 `make test-migrations` verifies a fresh Alembic upgrade and adoption of a legacy direct-created database schema.
 
-`make test-compose` builds and runs the full Docker Compose stack, then verifies the gateway, PostgreSQL-backed auth/stats APIs, C core stats through the gateway, and the React dashboard HTTP surface.
+`make test-compose` builds and runs the full Docker Compose stack, then verifies the gateway, PostgreSQL-backed auth/stats APIs, C core stats through the gateway, direct PostgreSQL schema/Alembic state, and the React dashboard HTTP surface.
 
 `make migrate-db` applies the Alembic schema migrations to `CHANNELWIRE_DATABASE_URL`, or to `sqlite:///./channelwire.db` by default.
 
