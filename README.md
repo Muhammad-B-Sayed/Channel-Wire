@@ -96,6 +96,7 @@ make test-malformed
 make test-migrations
 make test-compose
 make benchmark
+make soak
 make migrate-db
 make sanitize
 ```
@@ -105,6 +106,8 @@ make sanitize
 `make test-load` starts the server and runs a concurrent TCP client test against the binary protocol, then prints elapsed time, client-message throughput, server channel-message count, and total connection count.
 
 `make benchmark` runs a larger concurrent-client load test and writes a reproducible JSON report to `docs/benchmarks/latest-load.json`.
+
+`make soak` keeps one server process alive across repeated concurrent-client rounds and writes a JSON report to `docs/benchmarks/latest-soak.json`.
 
 `make test-lifecycle` verifies duplicate username rejection, joining multiple channels, switching active channels, renaming users, leaving channels, and graceful quit behavior.
 
@@ -229,7 +232,7 @@ The dashboard connects to `http://127.0.0.1:8000` by default. Set `VITE_GATEWAY_
 ## Roadmap
 
 - Add refresh-token/session management beyond short-lived bearer JWTs.
-- Add larger soak tests.
+- Add longer-duration soak runs.
 
 ## Requirement Evidence
 

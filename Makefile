@@ -18,7 +18,7 @@ CORE_BIN := $(BUILD_DIR)/channelwire-server
 CORE_SRCS := core/src/server.c core/src/protocol.c
 CORE_OBJS := $(CORE_SRCS:%.c=$(OBJ_DIR)/%.o)
 
-.PHONY: all clean test test-load benchmark test-lifecycle test-backpressure test-malformed test-gateway test-migrations test-compose migrate-db frontend-build sanitize docker-build docker-up docker-down FORCE
+.PHONY: all clean test test-load benchmark soak test-lifecycle test-backpressure test-malformed test-gateway test-migrations test-compose migrate-db frontend-build sanitize docker-build docker-up docker-down FORCE
 
 all: $(CORE_BIN)
 
@@ -43,6 +43,9 @@ test-load: all
 
 benchmark: all
 	python3 tests/load_test.py --server ./$(CORE_BIN) --clients 64 --report docs/benchmarks/latest-load.json
+
+soak: all
+	python3 tests/soak_test.py --server ./$(CORE_BIN) --rounds 5 --clients 16 --report docs/benchmarks/latest-soak.json
 
 test-lifecycle: all
 	python3 tests/lifecycle_test.py --server ./$(CORE_BIN)

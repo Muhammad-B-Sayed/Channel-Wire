@@ -1,0 +1,60 @@
+{
+  "client_messages_per_second": 1780.718,
+  "clients_per_round": 16,
+  "elapsed_seconds": 0.044926,
+  "final_server_stats": {
+    "channel_messages": 80,
+    "channels": 1,
+    "current_connections": 1,
+    "direct_messages": 0,
+    "malformed_frames": 0,
+    "max_queue_bytes": 65536,
+    "queue_disconnects": 0,
+    "registered_clients": 1,
+    "total_connections": 87
+  },
+  "rounds": 5,
+  "rounds_detail": [
+    {
+      "client_messages_per_second": 1237.229,
+      "clients": 16,
+      "elapsed_seconds": 0.012932,
+      "round": 1,
+      "server_channel_messages": 16,
+      "server_total_connections": 18
+    },
+    {
+      "client_messages_per_second": 1498.63,
+      "clients": 16,
+      "elapsed_seconds": 0.010676,
+      "round": 2,
+      "server_channel_messages": 32,
+      "server_total_connections": 35
+    },
+    {
+      "client_messages_per_second": 2504.468,
+      "clients": 16,
+      "elapsed_seconds": 0.006389,
+      "round": 3,
+      "server_channel_messages": 48,
+      "server_total_connections": 52
+    },
+    {
+      "client_messages_per_second": 2924.868,
+      "clients": 16,
+      "elapsed_seconds": 0.00547,
+      "round": 4,
+      "server_channel_messages": 64,
+      "server_total_connections": 69
+    },
+    {
+      "client_messages_per_second": 2270.685,
+      "clients": 16,
+      "elapsed_seconds": 0.007046,
+      "round": 5,
+      "server_channel_messages": 80,
+      "server_total_connections": 86
+    }
+  ],
+  "total_client_messages": 80
+}

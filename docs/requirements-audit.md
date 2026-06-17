@@ -73,6 +73,7 @@ Evidence:
 - Sanitizer-enabled C builds: `make SANITIZE=1 ...`
 - Automated integration/load/lifecycle/backpressure/malformed/gateway/frontend tests: `tests/`, `Makefile`
 - Load-test benchmark artifact: `docs/benchmarks/latest-load.json`
+- Repeated-round soak-test artifact: `docs/benchmarks/latest-soak.json`
 - Compose runtime smoke test with direct PostgreSQL schema/Alembic checks: `tests/compose_smoke_test.py`
 
 Verification:
@@ -80,6 +81,7 @@ Verification:
 ```sh
 docker compose config
 make benchmark
+make soak
 make test-compose
 ```
 
@@ -89,5 +91,5 @@ Local caveat: `make test-compose` requires a running Docker daemon. In the curre
 
 These are not required to truthfully support the current resume bullets, but would make the project stronger:
 
-- Larger soak tests.
+- Longer-duration soak runs.
 - Refresh-token or session management beyond bearer JWTs.
