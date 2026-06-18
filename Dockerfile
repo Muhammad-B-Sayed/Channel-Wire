@@ -1,17 +1,29 @@
-FROM alpine:3.20 AS build
+FROM python:3.12-slim AS build
 
-RUN apk add --no-cache build-base make
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential make \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY Makefile ./
 COPY core ./core
 RUN make
 
-FROM alpine:3.20
+FROM python:3.12-slim
 
-RUN adduser -D -H -s /sbin/nologin channelwire
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+ENV CHANNELWIRE_CORE_HOST=127.0.0.1
+ENV CHANNELWIRE_CORE_PORT=5555
+
 WORKDIR /app
+COPY gateway/requirements.txt ./gateway/requirements.txt
+RUN pip install --no-cache-dir -r gateway/requirements.txt
 COPY --from=build /app/build/channelwire-server /usr/local/bin/channelwire-server
-USER channelwire
-EXPOSE 5555
-ENV CW_BIND_HOST=0.0.0.0
-CMD ["channelwire-server", "5555"]
+COPY tools ./tools
+COPY gateway ./gateway
+COPY deploy/render/start.sh /usr/local/bin/channelwire-render-start
+RUN chmod +x /usr/local/bin/channelwire-render-start
+
+EXPOSE 8000
+CMD ["channelwire-render-start"]
