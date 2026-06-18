@@ -16,3 +16,5 @@ services:
         value: "0"
       - key: CHANNELWIRE_CORS_ORIGINS
         sync: false
+      - key: CHANNELWIRE_CORS_ORIGIN_REGEX
+        value: "https://.*\\.vercel\\.app"
