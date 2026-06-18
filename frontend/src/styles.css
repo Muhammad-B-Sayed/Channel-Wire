@@ -1,10 +1,24 @@
 :root {
-  color: #172026;
-  background: #f5f7f8;
+  background: #101820;
+  color: #e5edf3;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  --bg: #101820;
+  --surface: #162231;
+  --surface-raised: #1d2b3a;
+  --surface-soft: #223142;
+  --border: #314456;
+  --border-soft: #263746;
+  --text: #e5edf3;
+  --muted: #99aabc;
+  --primary: #3e8ab8;
+  --primary-strong: #55a6d6;
+  --primary-muted: #20384a;
+  --success: #4dbd8f;
+  --warning: #c58a2e;
+  --danger: #d56a5c;
 }
 
 * {
@@ -12,6 +26,7 @@
 }
 
 body {
+  background: var(--bg);
   margin: 0;
   min-width: 320px;
 }
@@ -24,31 +39,38 @@ textarea {
 
 button {
   align-items: center;
-  background: #1d4f73;
+  background: var(--primary);
   border: 0;
   border-radius: 6px;
-  color: #ffffff;
+  color: #07131d;
   cursor: pointer;
   display: inline-flex;
-  font-weight: 700;
+  font-weight: 800;
   gap: 8px;
+  justify-content: center;
   min-height: 38px;
   padding: 0 14px;
+  white-space: nowrap;
 }
 
 button:hover {
-  background: #163f5d;
+  background: var(--primary-strong);
 }
 
 input,
 textarea {
-  background: #ffffff;
-  border: 1px solid #cbd6dc;
+  background: #111c28;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  color: #172026;
+  color: var(--text);
   min-height: 38px;
   padding: 8px 10px;
   width: 100%;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #728598;
 }
 
 textarea {
@@ -62,26 +84,29 @@ p {
 }
 
 .appShell {
+  background: var(--bg);
   min-height: 100vh;
 }
 
 .topbar {
   align-items: center;
-  background: #ffffff;
-  border-bottom: 1px solid #d9e1e5;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
   display: flex;
   gap: 20px;
   justify-content: space-between;
+  min-height: 89px;
   padding: 18px 24px;
 }
 
 .topbar h1 {
+  color: var(--text);
   font-size: 24px;
   letter-spacing: 0;
 }
 
 .topbar p {
-  color: #5a6973;
+  color: var(--muted);
   font-size: 14px;
   margin-top: 2px;
 }
@@ -94,10 +119,10 @@ p {
 }
 
 label span {
-  color: #5a6973;
+  color: var(--muted);
   display: block;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
   margin-bottom: 5px;
 }
 
@@ -105,6 +130,8 @@ label span {
   display: grid;
   gap: 16px;
   grid-template-columns: 260px minmax(0, 1fr) 280px;
+  height: calc(100vh - 89px);
+  overflow: hidden;
   padding: 16px;
 }
 
@@ -113,10 +140,16 @@ label span {
   min-width: 0;
 }
 
+.sidebar {
+  max-height: 100%;
+  overflow: auto;
+  padding-right: 2px;
+}
+
 .panel,
 .chatSurface {
-  background: #ffffff;
-  border: 1px solid #d9e1e5;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 8px;
 }
 
@@ -127,9 +160,9 @@ label span {
 
 .panelTitle {
   align-items: center;
-  color: #172026;
+  color: var(--text);
   display: flex;
-  font-weight: 800;
+  font-weight: 900;
   gap: 8px;
   margin-bottom: 12px;
 }
@@ -142,11 +175,11 @@ label span {
 }
 
 .online {
-  color: #27835f;
+  color: var(--success);
 }
 
 .offline {
-  color: #9da8af;
+  color: #617283;
 }
 
 dl {
@@ -157,47 +190,50 @@ dl {
 }
 
 dt {
-  color: #5a6973;
+  color: var(--muted);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 900;
 }
 
 dd {
+  color: var(--text);
   margin: 0;
   overflow-wrap: anywhere;
 }
 
 .iconButton {
-  background: #e8eef2;
-  color: #1d4f73;
+  background: var(--primary-muted);
+  color: var(--primary-strong);
 }
 
 .iconButton:hover {
-  background: #dbe6ec;
+  background: #28445a;
 }
 
 .compactList {
+  color: var(--text);
   list-style: none;
   margin: 12px 0 0;
   padding: 0;
 }
 
 .compactList li {
-  border-top: 1px solid #edf1f3;
+  border-top: 1px solid var(--border-soft);
   padding: 8px 0;
 }
 
 .chatSurface {
   display: grid;
-  grid-template-rows: auto auto minmax(420px, 1fr) auto;
-  min-height: calc(100vh - 116px);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 
 .toolbar,
 .composer {
   align-items: center;
-  border-bottom: 1px solid #d9e1e5;
+  border-bottom: 1px solid var(--border);
   display: flex;
   gap: 10px;
   padding: 12px;
@@ -205,7 +241,7 @@ dd {
 
 .composer {
   border-bottom: 0;
-  border-top: 1px solid #d9e1e5;
+  border-top: 1px solid var(--border);
 }
 
 .channelForm {
@@ -213,13 +249,13 @@ dd {
   display: grid;
   flex: 1;
   gap: 10px;
-  grid-template-columns: auto minmax(120px, 240px) auto;
+  grid-template-columns: auto minmax(120px, 240px) minmax(96px, 1fr);
 }
 
 .errorBanner {
-  background: #fff0ed;
-  border-bottom: 1px solid #ffd0c6;
-  color: #8d2e1f;
+  background: #3a211f;
+  border-bottom: 1px solid #653631;
+  color: #ffafa4;
   padding: 10px 12px;
 }
 
@@ -227,12 +263,14 @@ dd {
   align-content: start;
   display: grid;
   gap: 10px;
+  min-height: 0;
   overflow: auto;
   padding: 12px;
 }
 
 .message {
-  border-left: 3px solid #9aa9b1;
+  border-left: 3px solid #65798a;
+  color: var(--text);
   padding: 8px 10px;
 }
 
@@ -244,32 +282,33 @@ dd {
 }
 
 .message header span {
-  font-weight: 800;
+  font-weight: 900;
 }
 
 .message small {
-  color: #5a6973;
+  color: var(--muted);
 }
 
 .message p {
   overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .message.chat {
-  border-color: #1d4f73;
+  border-color: var(--primary);
 }
 
 .message.dm {
-  border-color: #8a5a12;
+  border-color: var(--warning);
 }
 
 .message.error {
-  border-color: #bd3f2b;
+  border-color: var(--danger);
 }
 
 .message.system,
 .message.status {
-  border-color: #27835f;
+  border-color: var(--success);
 }
 
 .stackForm {
@@ -284,20 +323,21 @@ dd {
 }
 
 .metricGrid div {
-  background: #f5f7f8;
+  background: var(--surface-soft);
   border-radius: 6px;
   padding: 12px;
 }
 
 .metricGrid strong {
+  color: var(--text);
   display: block;
   font-size: 24px;
 }
 
 .metricGrid span {
-  color: #5a6973;
+  color: var(--muted);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 900;
 }
 
 .meterGroup {
@@ -313,17 +353,18 @@ dd {
 }
 
 .meterLabel span {
-  color: #5a6973;
+  color: var(--muted);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 900;
 }
 
 .meterLabel strong {
+  color: var(--text);
   font-size: 13px;
 }
 
 .meterTrack {
-  background: #edf1f3;
+  background: #111c28;
   border-radius: 999px;
   height: 8px;
   overflow: hidden;
@@ -336,15 +377,15 @@ dd {
 }
 
 .channelMeter {
-  background: #1d4f73;
+  background: var(--primary);
 }
 
 .directMeter {
-  background: #8a5a12;
+  background: var(--warning);
 }
 
 .pressureMeter {
-  background: #bd3f2b;
+  background: var(--danger);
 }
 
 .compactStats {
@@ -358,16 +399,16 @@ dd {
 }
 
 .trendGrid div {
-  background: #f5f7f8;
+  background: var(--surface-soft);
   border-radius: 6px;
   padding: 10px;
 }
 
 .trendGrid span {
-  color: #5a6973;
+  color: var(--muted);
   display: block;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 900;
   margin-bottom: 6px;
 }
 
@@ -385,15 +426,15 @@ dd {
 }
 
 .messageTrend polyline {
-  stroke: #1d4f73;
+  stroke: var(--primary-strong);
 }
 
 .queueTrend polyline {
-  stroke: #bd3f2b;
+  stroke: var(--danger);
 }
 
 .malformedTrend polyline {
-  stroke: #8a5a12;
+  stroke: var(--warning);
 }
 
 @media (max-width: 980px) {
@@ -407,7 +448,22 @@ dd {
     grid-template-columns: 1fr;
   }
 
+  .workspace {
+    height: auto;
+    overflow: visible;
+  }
+
+  .sidebar {
+    max-height: none;
+  }
+
   .chatSurface {
-    min-height: 620px;
+    height: 620px;
+    min-height: 0;
+  }
+
+  .toolbar {
+    align-items: stretch;
+    display: grid;
   }
 }
