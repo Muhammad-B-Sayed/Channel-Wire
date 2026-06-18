@@ -85,7 +85,11 @@ p {
 
 .appShell {
   background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
   min-height: 100vh;
+  overflow: hidden;
 }
 
 .topbar {
@@ -128,9 +132,10 @@ label span {
 
 .workspace {
   display: grid;
+  flex: 1;
   gap: 16px;
   grid-template-columns: 260px minmax(0, 1fr) 280px;
-  height: calc(100vh - 89px);
+  min-height: 0;
   overflow: hidden;
   padding: 16px;
 }
@@ -223,8 +228,8 @@ dd {
 }
 
 .chatSurface {
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -242,6 +247,8 @@ dd {
 .composer {
   border-bottom: 0;
   border-top: 1px solid var(--border);
+  flex: 0 0 auto;
+  margin-top: auto;
 }
 
 .channelForm {
@@ -262,6 +269,7 @@ dd {
 .messages {
   align-content: start;
   display: grid;
+  flex: 1 1 auto;
   gap: 10px;
   min-height: 0;
   overflow: auto;
