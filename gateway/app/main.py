@@ -64,6 +64,7 @@ CORE_HOST = os.getenv("CHANNELWIRE_CORE_HOST", "127.0.0.1")
 CORE_PORT = int(os.getenv("CHANNELWIRE_CORE_PORT", "5555"))
 JWT_SECRET = os.getenv("CHANNELWIRE_JWT_SECRET", "dev-secret-change-me")
 JWT_ALGORITHM = "HS256"
+ENABLE_DEV_TOKEN = os.getenv("CHANNELWIRE_ENABLE_DEV_TOKEN", "1") == "1"
 active_gateway_users: dict[str, int] = {}
 
 CLIENT_COMMANDS = {
@@ -253,6 +254,8 @@ async def health() -> dict[str, Any]:
 
 @app.post("/auth/dev-token", response_model=TokenResponse)
 async def dev_token(request: TokenRequest) -> TokenResponse:
+    if not ENABLE_DEV_TOKEN:
+        raise HTTPException(status_code=404, detail="dev token disabled")
     with session_scope() as db:
         upsert_user(db, request.username)
         db.commit()

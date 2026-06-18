@@ -135,6 +135,8 @@ docker compose down
 
 The React dashboard is available at `http://127.0.0.1:3000`, the gateway is available at `http://127.0.0.1:8000`, and PostgreSQL is published on `127.0.0.1:5432` when Docker Compose is running.
 
+For public deployment, use Render for the backend and Vercel for the frontend. See `docs/deployment.md`.
+
 ## Gateway
 
 Install the gateway dependencies:

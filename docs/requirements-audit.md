@@ -69,6 +69,8 @@ Evidence:
 - Dockerfile for gateway: `gateway/Dockerfile`
 - Dockerfile for frontend: `frontend/Dockerfile`
 - Docker Compose stack with core, gateway, PostgreSQL, and frontend: `docker-compose.yml`
+- Render backend deployment image and blueprint: `deploy/render/Dockerfile`, `render.yaml`
+- Vercel frontend deployment config: `vercel.json`
 - GitHub Actions CI: `.github/workflows/ci.yml`
 - Sanitizer-enabled C builds: `make SANITIZE=1 ...`
 - Automated integration/load/lifecycle/backpressure/malformed/gateway/frontend tests: `tests/`, `Makefile`

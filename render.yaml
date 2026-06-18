@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: channelwire-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./deploy/render/Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: CHANNELWIRE_DATABASE_URL
+        fromDatabase:
+          name: channelwire-db
+          property: connectionString
+      - key: CHANNELWIRE_JWT_SECRET
+        generateValue: true
+      - key: CHANNELWIRE_ENABLE_DEV_TOKEN
+        value: "0"
+      - key: CHANNELWIRE_CORS_ORIGINS
+        sync: false
+
+databases:
+  - name: channelwire-db
+    databaseName: channelwire
+    user: channelwire
+    plan: free

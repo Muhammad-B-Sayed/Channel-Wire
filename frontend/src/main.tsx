@@ -80,6 +80,7 @@ type MonitorSample = {
 
 const gatewayHttp = import.meta.env.VITE_GATEWAY_URL ?? "http://127.0.0.1:8000";
 const gatewayWs = gatewayHttp.replace(/^http/, "ws");
+const devTokenEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEV_TOKEN === "1";
 const MESSAGE_LIMIT = 80;
 const HELP_TEXT = `Commands:
 /help - show this help
@@ -482,10 +483,12 @@ function App() {
             <LogIn size={18} />
             Login
           </button>
-          <button type="button" className="iconButton" onClick={createToken}>
-            <LogIn size={18} />
-            Dev Token
-          </button>
+          {devTokenEnabled && (
+            <button type="button" className="iconButton" onClick={createToken}>
+              <LogIn size={18} />
+              Dev Token
+            </button>
+          )}
           <button onClick={connected ? disconnect : connect}>
             {connected ? <Cable size={18} /> : <LogIn size={18} />}
             {connected ? "Disconnect" : "Connect"}
