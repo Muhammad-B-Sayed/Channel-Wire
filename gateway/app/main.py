@@ -97,7 +97,7 @@ class TokenResponse(BaseModel):
 app = FastAPI(title="ChannelWire Gateway")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CHANNELWIRE_CORS_ORIGINS", "*").split(","),
+    allow_origins=[origin.strip() for origin in os.getenv("CHANNELWIRE_CORS_ORIGINS", "*").split(",") if origin.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -245,6 +245,15 @@ def gateway_event(msg_type: int, payload: bytes) -> dict[str, Any]:
         except json.JSONDecodeError:
             return {"type": "core_stats", "raw": payload.decode("utf-8", errors="replace")}
     return {"type": "raw", "message_type": msg_type, "payload": payload.hex()}
+
+
+@app.get("/")
+async def root() -> dict[str, str]:
+    return {
+        "status": "ok",
+        "service": "ChannelWire Gateway",
+        "health": "/health",
+    }
 
 
 @app.get("/health")
