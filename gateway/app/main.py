@@ -98,6 +98,7 @@ app = FastAPI(title="ChannelWire Gateway")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[origin.strip() for origin in os.getenv("CHANNELWIRE_CORS_ORIGINS", "*").split(",") if origin.strip()],
+    allow_origin_regex=os.getenv("CHANNELWIRE_CORS_ORIGIN_REGEX", r"https://.*\.vercel\.app"),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
