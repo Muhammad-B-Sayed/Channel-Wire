@@ -283,7 +283,11 @@ function App() {
 
   async function connect() {
     setError("");
-    const accessToken = token || (await createToken());
+    if (!token) {
+      setError("Register, log in, or click Dev Token before connecting");
+      return;
+    }
+    const accessToken = token;
     const ws = new WebSocket(`${gatewayWs}/ws?token=${encodeURIComponent(accessToken)}`);
     socketRef.current = ws;
 

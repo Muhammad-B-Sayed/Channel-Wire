@@ -227,7 +227,7 @@ npm --prefix frontend install
 npm --prefix frontend run dev
 ```
 
-The dashboard connects to `http://127.0.0.1:8000` by default. Set `VITE_GATEWAY_URL` before building if the gateway runs somewhere else. It can register/login for a JWT, use a dev token for demos, connect to the WebSocket gateway, and show gateway health, core address, live core users/channels, persisted users/channels/memberships/messages, queue disconnects, local event counts, message-mix meters, queue-pressure monitoring, and rolling trend charts for stored messages, queue pressure, and malformed frames.
+The dashboard connects to `http://127.0.0.1:8000` by default. Set `VITE_GATEWAY_URL` before building if the gateway runs somewhere else. Register/login for a JWT or click Dev Token for demos before connecting to the WebSocket gateway. The dashboard shows gateway health, core address, live core users/channels, persisted users/channels/memberships/messages, queue disconnects, local event counts, message-mix meters, queue-pressure monitoring, and rolling trend charts for stored messages, queue pressure, and malformed frames.
 
 The dashboard chat box supports `/help`, `/clear`, `/join CHANNEL`, `/switch CHANNEL`, `/leave CHANNEL`, `/dm USER MESSAGE`, `/who`, `/list`, `/stats`, `/history`, and `/quit`. The visible message list is capped to the latest 80 entries; older visible entries drop off as new events arrive, while persisted history remains available through the History button.
 
