@@ -7,18 +7,12 @@ services:
     healthCheckPath: /health
     envVars:
       - key: CHANNELWIRE_DATABASE_URL
-        fromDatabase:
-          name: channelwire-db
-          property: connectionString
+        sync: false
+      - key: CHANNELWIRE_DB_SCHEMA
+        value: channelwire
       - key: CHANNELWIRE_JWT_SECRET
         generateValue: true
       - key: CHANNELWIRE_ENABLE_DEV_TOKEN
         value: "0"
       - key: CHANNELWIRE_CORS_ORIGINS
         sync: false
-
-databases:
-  - name: channelwire-db
-    databaseName: channelwire
-    user: channelwire
-    plan: free

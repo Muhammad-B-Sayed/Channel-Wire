@@ -71,6 +71,7 @@ Evidence:
 - Docker Compose stack with core, gateway, PostgreSQL, and frontend: `docker-compose.yml`
 - Render backend deployment image and blueprint: `deploy/render/Dockerfile`, `render.yaml`
 - Vercel frontend deployment config: `vercel.json`
+- Shared Render Postgres isolation through `CHANNELWIRE_DB_SCHEMA=channelwire`
 - GitHub Actions CI: `.github/workflows/ci.yml`
 - Sanitizer-enabled C builds: `make SANITIZE=1 ...`
 - Automated integration/load/lifecycle/backpressure/malformed/gateway/frontend tests: `tests/`, `Makefile`

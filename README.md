@@ -119,7 +119,7 @@ make sanitize
 
 `make test-compose` builds and runs the full Docker Compose stack, then verifies the gateway, PostgreSQL-backed auth/stats APIs, C core stats through the gateway, direct PostgreSQL schema/Alembic state, and the React dashboard HTTP surface.
 
-`make migrate-db` applies the Alembic schema migrations to `CHANNELWIRE_DATABASE_URL`, or to `sqlite:///./channelwire.db` by default.
+`make migrate-db` applies the Alembic schema migrations to `CHANNELWIRE_DATABASE_URL`, or to `sqlite:///./channelwire.db` by default. For shared PostgreSQL databases, set `CHANNELWIRE_DB_SCHEMA=channelwire` so ChannelWire creates its tables inside that schema.
 
 ## Docker
 
