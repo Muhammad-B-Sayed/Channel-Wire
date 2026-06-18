@@ -1,12 +1,36 @@
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, and_, create_engine, func, inspect, or_, select, text
+from sqlalchemy import DateTime, ForeignKey, Integer, MetaData, String, Text, UniqueConstraint, and_, create_engine, func, inspect, or_, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 
-DATABASE_URL = os.getenv("CHANNELWIRE_DATABASE_URL", "sqlite:///./channelwire.db")
+def normalize_database_url(url: str) -> str:
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + url.removeprefix("postgresql://")
+    if url.startswith("postgres://"):
+        return "postgresql+psycopg://" + url.removeprefix("postgres://")
+    return url
+
+
+def normalize_schema_name(schema: str | None) -> str | None:
+    if not schema:
+        return None
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", schema):
+        raise ValueError("CHANNELWIRE_DB_SCHEMA must be a plain SQL identifier, like channelwire")
+    return schema
+
+
+def table_ref(table_name: str, column_name: str) -> str:
+    if DB_SCHEMA:
+        return f"{DB_SCHEMA}.{table_name}.{column_name}"
+    return f"{table_name}.{column_name}"
+
+
+DATABASE_URL = normalize_database_url(os.getenv("CHANNELWIRE_DATABASE_URL", "sqlite:///./channelwire.db"))
+DB_SCHEMA = normalize_schema_name(os.getenv("CHANNELWIRE_DB_SCHEMA"))
 
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 engine = create_engine(DATABASE_URL, future=True, connect_args=connect_args)
@@ -14,7 +38,7 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False
 
 
 class Base(DeclarativeBase):
-    pass
+    metadata = MetaData(schema=DB_SCHEMA)
 
 
 class User(Base):
@@ -37,8 +61,8 @@ class Membership(Base):
     __table_args__ = (UniqueConstraint("username", "channel_name", name="uq_membership_user_channel"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    username: Mapped[str] = mapped_column(ForeignKey("users.username"), index=True)
-    channel_name: Mapped[str] = mapped_column(ForeignKey("channels.name"), index=True)
+    username: Mapped[str] = mapped_column(ForeignKey(table_ref("users", "username")), index=True)
+    channel_name: Mapped[str] = mapped_column(ForeignKey(table_ref("channels", "name")), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
@@ -47,16 +71,16 @@ class Message(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     kind: Mapped[str] = mapped_column(String(16), index=True)
-    sender: Mapped[str] = mapped_column(ForeignKey("users.username"), index=True)
-    channel_name: Mapped[str | None] = mapped_column(ForeignKey("channels.name"), nullable=True, index=True)
-    recipient: Mapped[str | None] = mapped_column(ForeignKey("users.username"), nullable=True, index=True)
+    sender: Mapped[str] = mapped_column(ForeignKey(table_ref("users", "username")), index=True)
+    channel_name: Mapped[str | None] = mapped_column(ForeignKey(table_ref("channels", "name")), nullable=True, index=True)
+    recipient: Mapped[str | None] = mapped_column(ForeignKey(table_ref("users", "username")), nullable=True, index=True)
     body: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
 
 
 def has_unversioned_schema() -> bool:
-    tables = set(inspect(engine).get_table_names())
-    model_tables = set(Base.metadata.tables)
+    tables = set(inspect(engine).get_table_names(schema=DB_SCHEMA))
+    model_tables = {table.name for table in Base.metadata.sorted_tables}
     return "alembic_version" not in tables and model_tables.issubset(tables)
 
 
@@ -76,13 +100,19 @@ def migrate_db() -> None:
 
 
 def create_schema_direct() -> None:
+    if DB_SCHEMA and engine.dialect.name != "postgresql":
+        raise RuntimeError("CHANNELWIRE_DB_SCHEMA is only supported with PostgreSQL")
+    if DB_SCHEMA:
+        with engine.begin() as conn:
+            conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{DB_SCHEMA}"'))
     Base.metadata.create_all(bind=engine)
     inspector = inspect(engine)
-    if "users" in inspector.get_table_names():
-        columns = {column["name"] for column in inspector.get_columns("users")}
+    if "users" in inspector.get_table_names(schema=DB_SCHEMA):
+        columns = {column["name"] for column in inspector.get_columns("users", schema=DB_SCHEMA)}
         if "password_hash" not in columns:
+            users_table = f'"{DB_SCHEMA}".users' if DB_SCHEMA else "users"
             with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE users ADD COLUMN password_hash VARCHAR(256)"))
+                conn.execute(text(f"ALTER TABLE {users_table} ADD COLUMN password_hash VARCHAR(256)"))
 
 
 def init_db() -> None:

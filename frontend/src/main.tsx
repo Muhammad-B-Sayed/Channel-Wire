@@ -4,12 +4,14 @@ import {
   Activity,
   Cable,
   Circle,
+  HelpCircle,
   Hash,
   History,
   LogIn,
   MessagesSquare,
   RefreshCw,
   Send,
+  Trash2,
   Users
 } from "lucide-react";
 import "./styles.css";
@@ -78,6 +80,20 @@ type MonitorSample = {
 
 const gatewayHttp = import.meta.env.VITE_GATEWAY_URL ?? "http://127.0.0.1:8000";
 const gatewayWs = gatewayHttp.replace(/^http/, "ws");
+const devTokenEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEV_TOKEN === "1";
+const MESSAGE_LIMIT = 80;
+const HELP_TEXT = `Commands:
+/help - show this help
+/clear - clear visible messages
+/join CHANNEL - join a channel
+/switch CHANNEL - switch active channel
+/leave CHANNEL - leave a channel
+/dm USER MESSAGE - send a direct message
+/who - list live users
+/list - list live channels
+/stats - refresh monitoring
+/history - load channel history
+/quit - disconnect`;
 
 function Sparkline({ values, className }: { values: number[]; className: string }) {
   const width = 160;
@@ -121,6 +137,7 @@ function App() {
   const [persistedChannels, setPersistedChannels] = useState<PersistedChannel[]>([]);
   const [error, setError] = useState("");
   const socketRef = useRef<WebSocket | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const stats = useMemo(
     () => ({
@@ -158,7 +175,20 @@ function App() {
   );
 
   function pushLine(line: Omit<ChatLine, "id">) {
-    setMessages((current) => [...current.slice(-199), { ...line, id: Date.now() + Math.random() }]);
+    setMessages((current) => [...current.slice(-(MESSAGE_LIMIT - 1)), { ...line, id: Date.now() + Math.random() }]);
+  }
+
+  function replaceMessages(nextMessages: ChatLine[]) {
+    setMessages(nextMessages.slice(-MESSAGE_LIMIT));
+  }
+
+  function clearMessages() {
+    setMessages([]);
+    setError("");
+  }
+
+  function showHelp() {
+    pushLine({ kind: "system", text: HELP_TEXT });
   }
 
   function recordMonitorSample(platform: PlatformStats, core: CoreStats) {
@@ -254,7 +284,11 @@ function App() {
 
   async function connect() {
     setError("");
-    const accessToken = token || (await createToken());
+    if (!token) {
+      setError("Register, log in, or click Dev Token before connecting");
+      return;
+    }
+    const accessToken = token;
     const ws = new WebSocket(`${gatewayWs}/ws?token=${encodeURIComponent(accessToken)}`);
     socketRef.current = ws;
 
@@ -276,12 +310,13 @@ function App() {
     socketRef.current = null;
   }
 
-  function send(command: object) {
+  function send(command: object): boolean {
     if (socketRef.current?.readyState !== WebSocket.OPEN) {
       setError("Connect before sending commands");
-      return;
+      return false;
     }
     socketRef.current.send(JSON.stringify(command));
+    return true;
   }
 
   function handleGatewayEvent(event: GatewayEvent) {
@@ -312,8 +347,53 @@ function App() {
 
   function sendChat(event: FormEvent) {
     event.preventDefault();
-    send({ type: "say", text: message });
+    const text = message.trim();
+    if (!text) {
+      setError("Type a message or use /help");
+      return;
+    }
     setMessage("");
+    if (text.startsWith("/")) {
+      void handleSlashCommand(text);
+      return;
+    }
+    send({ type: "say", text });
+  }
+
+  async function handleSlashCommand(input: string) {
+    const [command, ...parts] = input.slice(1).split(/\s+/);
+    setError("");
+
+    if (command === "help") {
+      showHelp();
+    } else if (command === "clear") {
+      clearMessages();
+    } else if (command === "join" || command === "switch" || command === "leave") {
+      if (!parts[0]) {
+        setError(`/${command} requires a channel`);
+        return;
+      }
+      setChannel(parts[0]);
+      send({ type: command, channel: parts[0] });
+      if (command === "join") {
+        setTimeout(() => send({ type: "list" }), 100);
+      }
+    } else if (command === "dm") {
+      if (!parts[0] || !parts[1]) {
+        setError("/dm requires a user and message");
+        return;
+      }
+      send({ type: "dm", to: parts[0], text: parts.slice(1).join(" ") });
+    } else if (command === "who" || command === "list" || command === "quit") {
+      send({ type: command });
+    } else if (command === "stats") {
+      await refreshStats();
+      pushLine({ kind: "status", text: "Monitoring refreshed" });
+    } else if (command === "history") {
+      await loadHistory();
+    } else {
+      setError(`Unknown command: /${command}. Try /help`);
+    }
   }
 
   function sendDirect(event: FormEvent) {
@@ -333,7 +413,7 @@ function App() {
       return;
     }
     const body = await response.json();
-    setMessages(
+    replaceMessages(
       body.messages.map((item: { id: number; sender: string; text: string }) => ({
         id: item.id,
         kind: "chat",
@@ -355,7 +435,7 @@ function App() {
       return;
     }
     const body = await response.json();
-    setMessages(
+    replaceMessages(
       body.messages.map((item: { id: number; sender: string; text: string }) => ({
         id: item.id,
         kind: "dm",
@@ -369,6 +449,10 @@ function App() {
     refreshHealth().catch((exc: Error) => setError(exc.message));
     return () => socketRef.current?.close();
   }, []);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ block: "end" });
+  }, [messages]);
 
   return (
     <main className="appShell">
@@ -399,10 +483,12 @@ function App() {
             <LogIn size={18} />
             Login
           </button>
-          <button type="button" className="iconButton" onClick={createToken}>
-            <LogIn size={18} />
-            Dev Token
-          </button>
+          {devTokenEnabled && (
+            <button type="button" className="iconButton" onClick={createToken}>
+              <LogIn size={18} />
+              Dev Token
+            </button>
+          )}
           <button onClick={connected ? disconnect : connect}>
             {connected ? <Cable size={18} /> : <LogIn size={18} />}
             {connected ? "Disconnect" : "Connect"}
@@ -521,6 +607,14 @@ function App() {
               <History size={16} />
               History
             </button>
+            <button type="button" className="iconButton" onClick={showHelp}>
+              <HelpCircle size={16} />
+              Help
+            </button>
+            <button type="button" className="iconButton" onClick={clearMessages}>
+              <Trash2 size={16} />
+              Clear
+            </button>
           </div>
 
           {error && <div className="errorBanner">{error}</div>}
@@ -535,6 +629,7 @@ function App() {
                 <p>{item.text}</p>
               </article>
             ))}
+            <div ref={messagesEndRef} />
           </div>
 
           <form onSubmit={sendChat} className="composer">

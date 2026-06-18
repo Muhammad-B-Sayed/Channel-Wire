@@ -119,7 +119,7 @@ make sanitize
 
 `make test-compose` builds and runs the full Docker Compose stack, then verifies the gateway, PostgreSQL-backed auth/stats APIs, C core stats through the gateway, direct PostgreSQL schema/Alembic state, and the React dashboard HTTP surface.
 
-`make migrate-db` applies the Alembic schema migrations to `CHANNELWIRE_DATABASE_URL`, or to `sqlite:///./channelwire.db` by default.
+`make migrate-db` applies the Alembic schema migrations to `CHANNELWIRE_DATABASE_URL`, or to `sqlite:///./channelwire.db` by default. For shared PostgreSQL databases, set `CHANNELWIRE_DB_SCHEMA=channelwire` so ChannelWire creates its tables inside that schema.
 
 ## Docker
 
@@ -134,6 +134,8 @@ docker compose down
 ```
 
 The React dashboard is available at `http://127.0.0.1:3000`, the gateway is available at `http://127.0.0.1:8000`, and PostgreSQL is published on `127.0.0.1:5432` when Docker Compose is running.
+
+For public deployment, use Render for the backend and Vercel for the frontend. See `docs/deployment.md`.
 
 ## Gateway
 
@@ -227,7 +229,9 @@ npm --prefix frontend install
 npm --prefix frontend run dev
 ```
 
-The dashboard connects to `http://127.0.0.1:8000` by default. Set `VITE_GATEWAY_URL` before building if the gateway runs somewhere else. It can register/login for a JWT, use a dev token for demos, connect to the WebSocket gateway, and show gateway health, core address, live core users/channels, persisted users/channels/memberships/messages, queue disconnects, local event counts, message-mix meters, queue-pressure monitoring, and rolling trend charts for stored messages, queue pressure, and malformed frames.
+The dashboard connects to `http://127.0.0.1:8000` by default. Set `VITE_GATEWAY_URL` before building if the gateway runs somewhere else. Register/login for a JWT or click Dev Token for demos before connecting to the WebSocket gateway. The dashboard shows gateway health, core address, live core users/channels, persisted users/channels/memberships/messages, queue disconnects, local event counts, message-mix meters, queue-pressure monitoring, and rolling trend charts for stored messages, queue pressure, and malformed frames.
+
+The dashboard chat box supports `/help`, `/clear`, `/join CHANNEL`, `/switch CHANNEL`, `/leave CHANNEL`, `/dm USER MESSAGE`, `/who`, `/list`, `/stats`, `/history`, and `/quit`. The visible message list is capped to the latest 80 entries; older visible entries drop off as new events arrive, while persisted history remains available through the History button.
 
 ## Roadmap
 
