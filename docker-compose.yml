@@ -18,6 +18,7 @@ services:
   core:
     build:
       context: .
+      dockerfile: Dockerfile.core
     environment:
       CW_BIND_HOST: 0.0.0.0
     ports:
