@@ -1,22 +1,64 @@
 # ChannelWire
 
-ChannelWire is a production-style real-time messaging platform. It combines a C11 TCP messaging core, a FastAPI REST/WebSocket gateway, PostgreSQL-backed persistence, and a React + TypeScript dashboard for browser chat and server monitoring.
+ChannelWire is a production-style real-time messaging platform built around a custom C TCP server. It supports channel chat, direct messaging, browser-based WebSocket clients, persisted message history, and live server monitoring.
 
-The project is intentionally built like a deployable system, not just a local socket demo: it has Docker Compose, database migrations, GitHub Actions CI, sanitizer builds, integration tests, load tests, malformed-frame tests, a Render backend configuration, and a Vercel frontend configuration.
+The goal is to show systems-level networking and full-stack deployment in one project: a non-blocking C messaging core, a Python gateway, a PostgreSQL persistence layer, and a React dashboard packaged with tests, CI, Docker, and cloud deployment config.
 
-## Features
+## What It Does
 
-- Concurrent C messaging server using POSIX sockets, non-blocking I/O, and `poll()`.
-- Compact custom binary protocol with length-prefixed frames.
-- Channel chat, direct messages, nicknames, joins/leaves, user listing, channel listing, graceful quit, and server stats.
-- Backpressure-safe outgoing queues that disconnect slow clients before memory grows without bound.
-- Malformed frame and oversized payload rejection.
-- FastAPI gateway exposing authenticated REST and WebSocket APIs.
-- PostgreSQL or SQLite persistence for users, channels, memberships, and message history.
-- Alembic migrations, including support for sharing one PostgreSQL database through `CHANNELWIRE_DB_SCHEMA`.
-- React + TypeScript dashboard with dark UI, auth, WebSocket chat, direct messages, history, slash commands, and monitoring panels.
-- Docker Compose stack for local full-system runs.
-- Render backend deployment and Vercel frontend deployment support.
+- Runs a concurrent C11 TCP messaging server using POSIX sockets, non-blocking I/O, and `poll()`.
+- Implements a compact binary protocol with explicit message types and length-prefixed payloads.
+- Supports channel-based chat, direct messages, nicknames, joins/leaves, live user/channel listings, and graceful disconnects.
+- Protects the server with bounded outgoing queues, slow-client disconnects, and malformed-frame rejection.
+- Exposes the TCP core to browsers through a FastAPI REST/WebSocket gateway.
+- Persists users, channels, memberships, and message history with SQLAlchemy, Alembic, and PostgreSQL.
+- Provides a React + TypeScript dashboard for chat, history, direct messages, and live monitoring.
+
+## Why It Matters
+
+ChannelWire is more than a chat UI. It demonstrates how to connect low-level network programming to a deployable web application:
+
+- **Systems programming:** custom socket server, binary framing, non-blocking reads/writes, connection lifecycle management, and backpressure handling.
+- **Backend engineering:** authenticated REST/WebSocket gateway, database persistence, migrations, production environment variables, and health checks.
+- **Frontend engineering:** real-time dashboard, dark UI, slash commands, bounded message rendering, and monitoring panels.
+- **Production workflow:** Docker Compose, GitHub Actions CI, sanitizer-enabled C builds, integration tests, load tests, Render backend config, and Vercel frontend config.
+
+## Tech Stack
+
+| Layer | Technology |
+| --- | --- |
+| TCP core | C11, POSIX sockets, `poll()` |
+| Protocol | Custom binary frames |
+| Gateway | FastAPI, WebSockets, PyJWT |
+| Persistence | PostgreSQL, SQLite for local tests, SQLAlchemy, Alembic |
+| Frontend | React, TypeScript, Vite, lucide-react |
+| Local runtime | Docker Compose |
+| Deployment | Render backend, Vercel frontend |
+| Quality | GitHub Actions, sanitizer builds, integration/load/malformed-frame tests |
+
+## Demo Output
+
+Example browser workflow:
+
+```text
+Register/Login -> Connect -> Join #general -> Send messages -> Load history -> Monitor stats
+```
+
+Example CLI session against the TCP core:
+
+```text
+alice> /join general
+system: joined general
+alice #general> hello
+bob #general> hey alice
+alice> /dm bob private hello
+```
+
+Example health response from the deployed gateway:
+
+```json
+{"status":"ok","core_host":"127.0.0.1","core_port":5555}
+```
 
 ## Architecture
 
