@@ -586,9 +586,12 @@ export function App() {
   return (
     <main className="appShell">
       <section className="topbar" aria-label="Connection">
-        <div>
-          <h1>ChannelWire</h1>
-          <p>Realtime TCP core through a WebSocket/REST gateway</p>
+        <div className="brandLockup">
+          <img className="brandLogo" src="/channelwire.png" alt="ChannelWire messaging platform logo" />
+          <div>
+            <h1>ChannelWire</h1>
+            <p>Realtime TCP core through a WebSocket/REST gateway</p>
+          </div>
         </div>
         {token ? (
           <div className="loggedInControls">

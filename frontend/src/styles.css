@@ -110,6 +110,21 @@ p {
   letter-spacing: 0;
 }
 
+.brandLockup {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+
+.brandLogo {
+  border-radius: 10px;
+  flex: 0 0 auto;
+  height: 54px;
+  object-fit: cover;
+  width: 54px;
+}
+
 .topbar p {
   color: var(--muted);
   font-size: 14px;
