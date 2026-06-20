@@ -79,6 +79,7 @@ textarea {
 }
 
 h1,
+h2,
 p {
   margin: 0;
 }
@@ -119,7 +120,48 @@ p {
   align-items: end;
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(140px, 180px) minmax(140px, 180px) repeat(4, auto);
+  grid-template-columns: minmax(140px, 180px) minmax(140px, 180px) repeat(3, auto);
+}
+
+.loggedInControls,
+.signedInState {
+  align-items: center;
+  display: flex;
+}
+
+.loggedInControls {
+  gap: 18px;
+}
+
+.signedInState {
+  gap: 7px;
+}
+
+.signedInState span {
+  color: var(--muted);
+}
+
+.loggedOutState {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  padding: 24px;
+}
+
+.loggedOutState .panel {
+  margin: 0;
+  max-width: 520px;
+  padding: 28px;
+  width: 100%;
+}
+
+.loggedOutState p {
+  color: var(--muted);
+  margin-top: 8px;
+}
+
+.loggedOutState .errorBanner {
+  margin-top: 18px;
 }
 
 label span {

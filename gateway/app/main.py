@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import sys
 import time
@@ -12,8 +13,10 @@ from pathlib import Path
 from typing import Any
 
 import jwt
-from fastapi import FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
@@ -103,6 +106,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def friendly_validation_error(_request: Request, exc: RequestValidationError) -> JSONResponse:
+    for issue in exc.errors():
+        field = issue.get("loc", [None])[-1]
+        issue_type = issue.get("type")
+        if field == "password" and issue_type == "string_too_short":
+            return JSONResponse(status_code=422, content={"detail": "Password must be at least 8 characters."})
+        if field == "password" and issue_type == "missing":
+            return JSONResponse(status_code=422, content={"detail": "Enter a password."})
+        if field == "username":
+            return JSONResponse(
+                status_code=422,
+                content={"detail": "Enter a valid username using letters, numbers, periods, underscores, or hyphens."},
+            )
+    return JSONResponse(status_code=422, content={"detail": "Check the submitted information and try again."})
 
 
 @app.on_event("startup")
@@ -214,8 +234,10 @@ def core_payload_for_command(message: dict[str, Any]) -> tuple[int, bytes]:
     if msg_type == DM:
         target = message.get("to")
         text = message.get("text")
-        if not isinstance(target, str) or not target or not isinstance(text, str) or not text:
-            raise ValueError("dm requires to and text")
+        if not isinstance(target, str) or re.fullmatch(r"[A-Za-z0-9_.-]{1,32}", target) is None:
+            raise ValueError("User not found. Check the username and try again.")
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError("Enter a message.")
         return msg_type, string_payload(target, text)
 
     raise ValueError("unsupported command")
@@ -237,7 +259,10 @@ def gateway_event(msg_type: int, payload: bytes) -> dict[str, Any]:
     if msg_type == OK:
         return {"type": "ok", "message": payload.decode("utf-8", errors="replace")}
     if msg_type == ERROR:
-        return {"type": "error", "message": payload.decode("utf-8", errors="replace")}
+        message = payload.decode("utf-8", errors="replace")
+        if message in ("user not found", "invalid direct message"):
+            message = "User not found. Check the username and try again."
+        return {"type": "error", "message": message}
     if msg_type == SYSTEM:
         return {"type": "system", "message": payload.decode("utf-8", errors="replace")}
     if msg_type == STATS_RESP:

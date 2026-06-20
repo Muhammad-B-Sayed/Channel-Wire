@@ -239,9 +239,16 @@ static int safe_enqueue_text(client *c, uint8_t type, const char *text) {
     return 0;
 }
 
-static void broadcast_system(const char *text, const client *except) {
+static void broadcast_system_to_active_channel(const client *sender, const char *text) {
+    ssize_t channel_idx = find_channel(sender->active_channel);
+
+    if (channel_idx < 0) {
+        return;
+    }
+
     for (size_t i = 0; i < CW_MAX_CLIENTS; i++) {
-        if (&clients[i] != except && clients[i].fd >= 0 && clients[i].registered) {
+        if (&clients[i] != sender && clients[i].fd >= 0 && clients[i].registered &&
+            clients[i].joined[channel_idx]) {
             safe_enqueue_text(&clients[i], CW_MSG_SYSTEM, text);
         }
     }
@@ -281,10 +288,16 @@ static void broadcast_chat(client *sender, const char *text) {
 static void send_who(client *c) {
     char payload[CW_MAX_PAYLOAD_SIZE];
     size_t used = 0;
+    ssize_t channel_idx = find_channel(c->active_channel);
+
+    if (channel_idx < 0) {
+        safe_enqueue_text(c, CW_MSG_ERROR, "join a channel before listing participants");
+        return;
+    }
 
     payload[0] = '\0';
     for (size_t i = 0; i < CW_MAX_CLIENTS; i++) {
-        if (clients[i].fd >= 0 && clients[i].registered) {
+        if (clients[i].fd >= 0 && clients[i].registered && clients[i].joined[channel_idx]) {
             int written = snprintf(payload + used,
                                    sizeof(payload) - used,
                                    "%s%s",
@@ -370,7 +383,6 @@ static int read_one_string_payload(const uint8_t *payload,
 
 static void handle_hello(client *c, const uint8_t *payload, size_t payload_len) {
     char username[CW_NAME_CAP + 1];
-    char notice[128];
 
     if (read_one_string_payload(payload, payload_len, username, sizeof(username)) != 0 ||
         !cw_valid_name(username, 1, CW_NAME_CAP)) {
@@ -385,9 +397,6 @@ static void handle_hello(client *c, const uint8_t *payload, size_t payload_len) 
     snprintf(c->username, sizeof(c->username), "%s", username);
     c->registered = 1;
     safe_enqueue_text(c, CW_MSG_OK, "registered");
-
-    snprintf(notice, sizeof(notice), "%s connected", c->username);
-    broadcast_system(notice, c);
 }
 
 static void join_channel(client *c, const uint8_t *payload, size_t payload_len, int make_active) {
@@ -531,7 +540,7 @@ static void handle_nick(client *c, const uint8_t *payload, size_t payload_len) {
     safe_enqueue_text(c, CW_MSG_OK, "username changed");
 
     snprintf(notice, sizeof(notice), "%s is now %s", old_name[0] == '\0' ? "anonymous" : old_name, username);
-    broadcast_system(notice, c);
+    broadcast_system_to_active_channel(c, notice);
 }
 
 static void handle_frame(client *c, uint8_t type, const uint8_t *payload, size_t payload_len) {

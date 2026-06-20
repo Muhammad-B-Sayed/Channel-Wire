@@ -2,12 +2,12 @@ import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Activity,
-  Cable,
   Circle,
   HelpCircle,
   Hash,
   History,
   LogIn,
+  LogOut,
   MessagesSquare,
   RefreshCw,
   Send,
@@ -61,11 +61,6 @@ type CoreStats = {
   max_queue_bytes: number;
 };
 
-type PersistedUser = {
-  username: string;
-  created_at: string;
-};
-
 type PersistedChannel = {
   name: string;
   created_at: string;
@@ -82,6 +77,7 @@ const gatewayHttp = import.meta.env.VITE_GATEWAY_URL ?? "http://127.0.0.1:8000";
 const gatewayWs = gatewayHttp.replace(/^http/, "ws");
 const devTokenEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEV_TOKEN === "1";
 const MESSAGE_LIMIT = 80;
+const RECONNECT_MAX_DELAY_MS = 10_000;
 const HELP_TEXT = `Commands:
 /help - show this help
 /clear - clear visible messages
@@ -89,11 +85,50 @@ const HELP_TEXT = `Commands:
 /switch CHANNEL - switch active channel
 /leave CHANNEL - leave a channel
 /dm USER MESSAGE - send a direct message
-/who - list live users
+/who - list participants in the active channel
 /list - list live channels
 /stats - refresh monitoring
 /history - load channel history
-/quit - disconnect`;
+/quit - log out`;
+
+type ValidationIssue = {
+  type?: string;
+  loc?: Array<string | number>;
+  msg?: string;
+};
+
+export async function responseError(response: Response): Promise<string> {
+  const fallback = "Something went wrong. Please try again.";
+  let body: { detail?: string | ValidationIssue[] } | null = null;
+
+  try {
+    body = await response.clone().json();
+  } catch {
+    const text = (await response.text()).trim();
+    return text || fallback;
+  }
+
+  if (typeof body?.detail === "string") {
+    return body.detail;
+  }
+
+  const issue = Array.isArray(body?.detail) ? body.detail[0] : undefined;
+  const field = issue?.loc?.at(-1);
+  if (field === "password" && issue?.type === "string_too_short") {
+    return "Password must be at least 8 characters.";
+  }
+  if (field === "username") {
+    return "Enter a valid username using letters, numbers, periods, underscores, or hyphens.";
+  }
+  return fallback;
+}
+
+function friendlyGatewayError(message: string): string {
+  if (message === "user not found" || message === "invalid direct message" || message === "dm requires to and text") {
+    return "User not found. Check the username and try again.";
+  }
+  return message;
+}
 
 function Sparkline({ values, className }: { values: number[]; className: string }) {
   const width = 160;
@@ -117,11 +152,13 @@ function Sparkline({ values, className }: { values: number[]; className: string 
   );
 }
 
-function App() {
+export function App() {
   const [username, setUsername] = useState("alice");
   const [password, setPassword] = useState("");
   const [token, setToken] = useState("");
+  const [authenticatedUsername, setAuthenticatedUsername] = useState("");
   const [channel, setChannel] = useState("general");
+  const [activeChannel, setActiveChannel] = useState("");
   const [message, setMessage] = useState("");
   const [dmTo, setDmTo] = useState("");
   const [dmText, setDmText] = useState("");
@@ -133,10 +170,14 @@ function App() {
   const [platformStats, setPlatformStats] = useState<PlatformStats | null>(null);
   const [coreStats, setCoreStats] = useState<CoreStats | null>(null);
   const [monitorSamples, setMonitorSamples] = useState<MonitorSample[]>([]);
-  const [persistedUsers, setPersistedUsers] = useState<PersistedUser[]>([]);
   const [persistedChannels, setPersistedChannels] = useState<PersistedChannel[]>([]);
   const [error, setError] = useState("");
   const socketRef = useRef<WebSocket | null>(null);
+  const tokenRef = useRef("");
+  const activeChannelRef = useRef("");
+  const reconnectTimerRef = useRef<number | null>(null);
+  const reconnectAttemptRef = useRef(0);
+  const allowReconnectRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const stats = useMemo(
@@ -223,12 +264,14 @@ function App() {
     const response = await fetch(`${gatewayHttp}/stats?token=${encodeURIComponent(accessToken)}`);
     if (response.ok) {
       nextPlatformStats = await response.json();
+      if (tokenRef.current !== accessToken) return;
       setPlatformStats(nextPlatformStats);
     }
 
     const coreResponse = await fetch(`${gatewayHttp}/core-stats?token=${encodeURIComponent(accessToken)}`);
     if (coreResponse.ok) {
       nextCoreStats = await coreResponse.json();
+      if (tokenRef.current !== accessToken) return;
       setCoreStats(nextCoreStats);
     }
 
@@ -236,15 +279,10 @@ function App() {
       recordMonitorSample(nextPlatformStats, nextCoreStats);
     }
 
-    const usersResponse = await fetch(`${gatewayHttp}/db/users?token=${encodeURIComponent(accessToken)}`);
-    if (usersResponse.ok) {
-      const body = await usersResponse.json();
-      setPersistedUsers(body.users);
-    }
-
     const channelsResponse = await fetch(`${gatewayHttp}/db/channels?token=${encodeURIComponent(accessToken)}`);
     if (channelsResponse.ok) {
       const body = await channelsResponse.json();
+      if (tokenRef.current !== accessToken) return;
       setPersistedChannels(body.channels);
     }
   }
@@ -256,11 +294,15 @@ function App() {
       body: JSON.stringify({ username })
     });
     if (!response.ok) {
-      throw new Error(await response.text());
+      setError(await responseError(response));
+      return "";
     }
     const body = await response.json();
-    setToken(body.access_token);
+    startSession(body.access_token, username);
     await refreshStats(body.access_token);
+    if (tokenRef.current === body.access_token) {
+      connect(body.access_token);
+    }
     return body.access_token as string;
   }
 
@@ -272,65 +314,129 @@ function App() {
       body: JSON.stringify({ username, password })
     });
     if (!response.ok) {
-      setError(await response.text());
+      setError(await responseError(response));
       return "";
     }
     const body = await response.json();
-    setToken(body.access_token);
+    startSession(body.access_token, username);
     await refreshStats(body.access_token);
+    if (tokenRef.current === body.access_token) {
+      connect(body.access_token);
+    }
     pushLine({ kind: "status", text: `${path === "register" ? "Registered" : "Logged in"} as ${username}` });
     return body.access_token as string;
   }
 
-  async function connect() {
+  function startSession(accessToken: string, signedInUsername: string) {
+    tokenRef.current = accessToken;
+    allowReconnectRef.current = true;
+    reconnectAttemptRef.current = 0;
+    setToken(accessToken);
+    setAuthenticatedUsername(signedInUsername);
+    setPassword("");
     setError("");
-    if (!token) {
-      setError("Register, log in, or click Dev Token before connecting");
+  }
+
+  function connect(accessToken = tokenRef.current) {
+    if (!accessToken || !allowReconnectRef.current) {
       return;
     }
-    const accessToken = token;
+    if (socketRef.current?.readyState === WebSocket.OPEN || socketRef.current?.readyState === WebSocket.CONNECTING) {
+      return;
+    }
     const ws = new WebSocket(`${gatewayWs}/ws?token=${encodeURIComponent(accessToken)}`);
     socketRef.current = ws;
 
     ws.onopen = () => {
+      reconnectAttemptRef.current = 0;
       setConnected(true);
       pushLine({ kind: "status", text: "WebSocket connected" });
     };
-    ws.onmessage = (event) => handleGatewayEvent(JSON.parse(event.data));
+    ws.onmessage = (event) => handleGatewayEvent(JSON.parse(event.data), ws);
     ws.onclose = () => {
+      if (socketRef.current === ws) {
+        socketRef.current = null;
+      }
       setConnected(false);
-      pushLine({ kind: "status", text: "WebSocket closed" });
+      if (!allowReconnectRef.current || !tokenRef.current) {
+        return;
+      }
+      pushLine({ kind: "status", text: "Connection lost. Reconnecting…" });
+      const delay = Math.min(1000 * 2 ** reconnectAttemptRef.current, RECONNECT_MAX_DELAY_MS);
+      reconnectAttemptRef.current += 1;
+      reconnectTimerRef.current = window.setTimeout(() => connect(tokenRef.current), delay);
     };
-    ws.onerror = () => setError("WebSocket error");
+    ws.onerror = () => ws.close();
   }
 
-  function disconnect() {
-    socketRef.current?.send(JSON.stringify({ type: "quit" }));
+  function logout() {
+    allowReconnectRef.current = false;
+    tokenRef.current = "";
+    activeChannelRef.current = "";
+    if (reconnectTimerRef.current !== null) {
+      window.clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ type: "quit" }));
+    }
     socketRef.current?.close();
     socketRef.current = null;
+    setToken("");
+    setAuthenticatedUsername("");
+    setUsername("");
+    setConnected(false);
+    setPassword("");
+    setActiveChannel("");
+    setMessage("");
+    setDmTo("");
+    setDmText("");
+    setMessages([]);
+    setUsers([]);
+    setChannels([]);
+    setPlatformStats(null);
+    setCoreStats(null);
+    setMonitorSamples([]);
+    setPersistedChannels([]);
+    setError("");
   }
 
   function send(command: object): boolean {
     if (socketRef.current?.readyState !== WebSocket.OPEN) {
-      setError("Connect before sending commands");
+      setError("Connection unavailable. Reconnecting…");
       return false;
     }
     socketRef.current.send(JSON.stringify(command));
     return true;
   }
 
-  function handleGatewayEvent(event: GatewayEvent) {
+  function handleGatewayEvent(event: GatewayEvent, sourceSocket = socketRef.current) {
     if (event.type === "ready") {
       pushLine({ kind: "status", text: `Ready as ${event.username}` });
+      if (activeChannelRef.current && sourceSocket?.readyState === WebSocket.OPEN) {
+        sourceSocket.send(JSON.stringify({ type: "join", channel: activeChannelRef.current }));
+      }
     } else if (event.type === "chat") {
       pushLine({ kind: "chat", channel: event.channel, sender: event.sender, text: event.text });
     } else if (event.type === "dm") {
       pushLine({ kind: "dm", sender: event.sender, text: event.text });
     } else if (event.type === "system" || event.type === "ok") {
       pushLine({ kind: "system", text: event.message });
+      if (event.type === "ok" && /^(joined|switched) /.test(event.message)) {
+        const nextActiveChannel = event.message.slice(event.message.indexOf(" ") + 1);
+        activeChannelRef.current = nextActiveChannel;
+        setActiveChannel(nextActiveChannel);
+        setUsers([]);
+        send({ type: "who" });
+      } else if (event.type === "ok" && event.message === "left channel") {
+        activeChannelRef.current = "";
+        setActiveChannel("");
+        setUsers([]);
+      }
     } else if (event.type === "error") {
-      pushLine({ kind: "error", text: event.message });
-      setError(event.message);
+      const message = friendlyGatewayError(event.message);
+      pushLine({ kind: "error", text: message });
+      setError(message);
     } else if (event.type === "who") {
       setUsers(event.users);
     } else if (event.type === "channels") {
@@ -380,12 +486,14 @@ function App() {
       }
     } else if (command === "dm") {
       if (!parts[0] || !parts[1]) {
-        setError("/dm requires a user and message");
+        setError("Enter a username and message to send a direct message.");
         return;
       }
       send({ type: "dm", to: parts[0], text: parts.slice(1).join(" ") });
-    } else if (command === "who" || command === "list" || command === "quit") {
+    } else if (command === "who" || command === "list") {
       send({ type: command });
+    } else if (command === "quit") {
+      logout();
     } else if (command === "stats") {
       await refreshStats();
       pushLine({ kind: "status", text: "Monitoring refreshed" });
@@ -398,7 +506,22 @@ function App() {
 
   function sendDirect(event: FormEvent) {
     event.preventDefault();
-    send({ type: "dm", to: dmTo, text: dmText });
+    const recipient = dmTo.trim();
+    const text = dmText.trim();
+    if (!recipient) {
+      setError("Enter a username.");
+      return;
+    }
+    if (!text) {
+      setError("Enter a message.");
+      return;
+    }
+    if (!/^[A-Za-z0-9_.-]{1,32}$/.test(recipient)) {
+      setError("User not found. Check the username and try again.");
+      return;
+    }
+    setError("");
+    send({ type: "dm", to: recipient, text });
     setDmText("");
   }
 
@@ -409,7 +532,7 @@ function App() {
     }
     const response = await fetch(`${gatewayHttp}/history/${encodeURIComponent(channel)}?token=${encodeURIComponent(token)}`);
     if (!response.ok) {
-      setError(await response.text());
+      setError(await responseError(response));
       return;
     }
     const body = await response.json();
@@ -431,7 +554,7 @@ function App() {
     }
     const response = await fetch(`${gatewayHttp}/history/dm/${encodeURIComponent(dmTo)}?token=${encodeURIComponent(token)}`);
     if (!response.ok) {
-      setError(await response.text());
+      setError(await responseError(response));
       return;
     }
     const body = await response.json();
@@ -447,7 +570,13 @@ function App() {
 
   useEffect(() => {
     refreshHealth().catch((exc: Error) => setError(exc.message));
-    return () => socketRef.current?.close();
+    return () => {
+      allowReconnectRef.current = false;
+      if (reconnectTimerRef.current !== null) {
+        window.clearTimeout(reconnectTimerRef.current);
+      }
+      socketRef.current?.close();
+    };
   }, []);
 
   useEffect(() => {
@@ -461,42 +590,52 @@ function App() {
           <h1>ChannelWire</h1>
           <p>Realtime TCP core through a WebSocket/REST gateway</p>
         </div>
-        <div className="connectionControls">
-          <label>
-            <span>Username</span>
-            <input value={username} onChange={(event) => setUsername(event.target.value)} />
-          </label>
-          <label>
-            <span>Password</span>
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="8+ chars"
-            />
-          </label>
-          <button type="button" className="iconButton" onClick={() => authenticate("register")}>
-            <LogIn size={18} />
-            Register
-          </button>
-          <button type="button" className="iconButton" onClick={() => authenticate("login")}>
-            <LogIn size={18} />
-            Login
-          </button>
-          {devTokenEnabled && (
-            <button type="button" className="iconButton" onClick={createToken}>
-              <LogIn size={18} />
-              Dev Token
+        {token ? (
+          <div className="loggedInControls">
+            <div className="signedInState">
+              <span>Signed in as</span>
+              <strong>{authenticatedUsername}</strong>
+            </div>
+            <button type="button" className="iconButton" onClick={logout}>
+              <LogOut size={18} />
+              Logout
             </button>
-          )}
-          <button onClick={connected ? disconnect : connect}>
-            {connected ? <Cable size={18} /> : <LogIn size={18} />}
-            {connected ? "Disconnect" : "Connect"}
-          </button>
-        </div>
+          </div>
+        ) : (
+          <div className="connectionControls">
+            <label>
+              <span>Username</span>
+              <input value={username} onChange={(event) => setUsername(event.target.value)} />
+            </label>
+            <label>
+              <span>Password</span>
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="8+ chars"
+              />
+            </label>
+            <button type="button" className="iconButton" onClick={() => authenticate("register")}>
+              <LogIn size={18} />
+              Register
+            </button>
+            <button type="button" className="iconButton" onClick={() => authenticate("login")}>
+              <LogIn size={18} />
+              Login
+            </button>
+            {devTokenEnabled && (
+              <button type="button" className="iconButton" onClick={createToken}>
+                <LogIn size={18} />
+                Dev Token
+              </button>
+            )}
+          </div>
+        )}
       </section>
 
-      <section className="workspace">
+      {token ? (
+        <section className="workspace">
         <aside className="sidebar" aria-label="Server status">
           <div className="panel">
             <div className="panelTitle">
@@ -505,7 +644,7 @@ function App() {
             </div>
             <div className="statusLine">
               <Circle className={connected ? "online" : "offline"} size={12} fill="currentColor" />
-              {connected ? "Connected" : "Disconnected"}
+              {connected ? "Connected" : "Connecting…"}
             </div>
             <dl>
               <dt>Gateway</dt>
@@ -558,11 +697,11 @@ function App() {
           <div className="panel">
             <div className="panelTitle">
               <Users size={18} />
-              Live Users
+              Participants{activeChannel ? ` in #${activeChannel}` : ""}
             </div>
             <button className="iconButton" onClick={() => send({ type: "who" })}>
               <RefreshCw size={16} />
-              Who
+              Refresh
             </button>
             <ul className="compactList">
               {users.map((item) => (
@@ -583,17 +722,6 @@ function App() {
             </ul>
           </div>
 
-          <div className="panel">
-            <div className="panelTitle">
-              <Users size={18} />
-              Persisted Users
-            </div>
-            <ul className="compactList">
-              {persistedUsers.map((item) => (
-                <li key={item.username}>{item.username}</li>
-              ))}
-            </ul>
-          </div>
         </aside>
 
         <section className="chatSurface" aria-label="Messaging">
@@ -728,9 +856,21 @@ function App() {
             </div>
           </div>
         </aside>
-      </section>
+        </section>
+      ) : (
+        <section className="loggedOutState" aria-label="Logged out">
+          <div className="panel">
+            <h2>Sign in to ChannelWire</h2>
+            <p>Log in or register to access channels, messages, and monitoring.</p>
+            {error && <div className="errorBanner">{error}</div>}
+          </div>
+        </section>
+      )}
     </main>
   );
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+const rootElement = document.getElementById("root");
+if (rootElement) {
+  createRoot(rootElement).render(<App />);
+}

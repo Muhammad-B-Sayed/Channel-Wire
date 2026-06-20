@@ -78,6 +78,15 @@ def run(server: str) -> None:
                 assert register_resp.status_code == 200
                 assert register_resp.json()["access_token"]
 
+                short_password = client.post(
+                    "/auth/login",
+                    json={"username": "loginuser", "password": "short"},
+                )
+                assert short_password.status_code == 422
+                assert short_password.json() == {
+                    "detail": "Password must be at least 8 characters."
+                }
+
                 duplicate_resp = client.post(
                     "/auth/register",
                     json={"username": "loginuser", "password": "correct-horse-battery"},
@@ -120,6 +129,16 @@ def run(server: str) -> None:
                         "channel": "general",
                         "sender": "webalice",
                         "text": "hello from websocket",
+                    }
+                    ws.send_json({"type": "dm", "to": "missing-user", "text": "hello"})
+                    assert ws.receive_json() == {
+                        "type": "error",
+                        "message": "User not found. Check the username and try again.",
+                    }
+                    ws.send_json({"type": "dm", "to": "invalid user!", "text": "hello"})
+                    assert ws.receive_json() == {
+                        "type": "error",
+                        "message": "User not found. Check the username and try again.",
                     }
                     ws.send_json({"type": "quit"})
 

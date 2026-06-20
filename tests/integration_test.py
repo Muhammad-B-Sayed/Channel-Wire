@@ -25,7 +25,6 @@ from channelwire_client import (
     SAY,
     STATS,
     STATS_RESP,
-    SYSTEM,
     WHO,
     WHO_RESP,
     connect_registered,
@@ -77,7 +76,7 @@ def run(server: str) -> None:
 
         alice = connect_client(port, "alice")
         bob = connect_client(port, "bob")
-        expect_text(alice, SYSTEM, b"bob connected")
+        charlie = connect_client(port, "charlie")
 
         send_frame(bob, LIST)
         expect_text(bob, LIST_RESP, b"")
@@ -86,6 +85,8 @@ def run(server: str) -> None:
         expect_text(alice, OK, b"joined general")
         send_frame(bob, JOIN, string_payload("general"))
         expect_text(bob, OK, b"joined general")
+        send_frame(charlie, JOIN, string_payload("private"))
+        expect_text(charlie, OK, b"joined private")
 
         send_frame(alice, SAY, string_payload("hello from alice"))
         got = read_frame(alice)
@@ -105,7 +106,12 @@ def run(server: str) -> None:
         got = read_frame(alice)
         assert got.msg_type == WHO_RESP
         users = set(got.payload.decode("utf-8").splitlines())
-        assert {"alice", "bob"} <= users
+        assert users == {"alice", "bob"}
+
+        send_frame(charlie, WHO)
+        got = read_frame(charlie)
+        assert got.msg_type == WHO_RESP
+        assert got.payload.decode("utf-8").splitlines() == ["charlie"]
 
         send_frame(alice, LIST)
         got = read_frame(alice)
@@ -133,6 +139,7 @@ def run(server: str) -> None:
         bob.sendall(encode_frame(QUIT))
         alice.close()
         bob.close()
+        charlie.close()
         bad.close()
     finally:
         proc.terminate()
