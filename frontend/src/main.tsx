@@ -78,6 +78,7 @@ const gatewayWs = gatewayHttp.replace(/^http/, "ws");
 const devTokenEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEV_TOKEN === "1";
 const MESSAGE_LIMIT = 80;
 const RECONNECT_MAX_DELAY_MS = 10_000;
+export const SESSION_STORAGE_KEY = "channelwire-session";
 const HELP_TEXT = `Commands:
 /help - show this help
 /clear - clear visible messages
@@ -96,6 +97,44 @@ type ValidationIssue = {
   loc?: Array<string | number>;
   msg?: string;
 };
+
+type StoredSession = {
+  token: string;
+  username: string;
+};
+
+function clearStoredSession() {
+  window.localStorage.removeItem(SESSION_STORAGE_KEY);
+}
+
+function readStoredSession(): StoredSession | null {
+  try {
+    const stored = window.localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!stored) return null;
+    const session = JSON.parse(stored) as Partial<StoredSession>;
+    if (typeof session.token !== "string" || typeof session.username !== "string" || !session.token || !session.username) {
+      clearStoredSession();
+      return null;
+    }
+
+    const encodedPayload = session.token.split(".")[1];
+    if (!encodedPayload) {
+      clearStoredSession();
+      return null;
+    }
+    const normalizedPayload = encodedPayload.replace(/-/g, "+").replace(/_/g, "/");
+    const paddedPayload = normalizedPayload.padEnd(Math.ceil(normalizedPayload.length / 4) * 4, "=");
+    const payload = JSON.parse(atob(paddedPayload)) as { exp?: number };
+    if (typeof payload.exp !== "number" || payload.exp <= Date.now() / 1000) {
+      clearStoredSession();
+      return null;
+    }
+    return { token: session.token, username: session.username };
+  } catch {
+    clearStoredSession();
+    return null;
+  }
+}
 
 export async function responseError(response: Response): Promise<string> {
   const fallback = "Something went wrong. Please try again.";
@@ -153,10 +192,11 @@ function Sparkline({ values, className }: { values: number[]; className: string 
 }
 
 export function App() {
-  const [username, setUsername] = useState("alice");
+  const [initialSession] = useState(readStoredSession);
+  const [username, setUsername] = useState(initialSession?.username ?? "alice");
   const [password, setPassword] = useState("");
-  const [token, setToken] = useState("");
-  const [authenticatedUsername, setAuthenticatedUsername] = useState("");
+  const [token, setToken] = useState(initialSession?.token ?? "");
+  const [authenticatedUsername, setAuthenticatedUsername] = useState(initialSession?.username ?? "");
   const [channel, setChannel] = useState("general");
   const [activeChannel, setActiveChannel] = useState("");
   const [message, setMessage] = useState("");
@@ -173,11 +213,11 @@ export function App() {
   const [persistedChannels, setPersistedChannels] = useState<PersistedChannel[]>([]);
   const [error, setError] = useState("");
   const socketRef = useRef<WebSocket | null>(null);
-  const tokenRef = useRef("");
+  const tokenRef = useRef(initialSession?.token ?? "");
   const activeChannelRef = useRef("");
   const reconnectTimerRef = useRef<number | null>(null);
   const reconnectAttemptRef = useRef(0);
-  const allowReconnectRef = useRef(false);
+  const allowReconnectRef = useRef(Boolean(initialSession));
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const stats = useMemo(
@@ -254,24 +294,29 @@ export function App() {
     setHealth(await response.json());
   }
 
-  async function refreshStats(accessToken = token) {
+  async function refreshStats(accessToken = token): Promise<boolean> {
     if (!accessToken) {
-      return;
+      return false;
     }
     let nextPlatformStats: PlatformStats | null = null;
     let nextCoreStats: CoreStats | null = null;
 
     const response = await fetch(`${gatewayHttp}/stats?token=${encodeURIComponent(accessToken)}`);
+    if (response.status === 401 || response.status === 403) {
+      logout();
+      return false;
+    }
+    if (!response.ok) return false;
     if (response.ok) {
       nextPlatformStats = await response.json();
-      if (tokenRef.current !== accessToken) return;
+      if (tokenRef.current !== accessToken) return false;
       setPlatformStats(nextPlatformStats);
     }
 
     const coreResponse = await fetch(`${gatewayHttp}/core-stats?token=${encodeURIComponent(accessToken)}`);
     if (coreResponse.ok) {
       nextCoreStats = await coreResponse.json();
-      if (tokenRef.current !== accessToken) return;
+      if (tokenRef.current !== accessToken) return false;
       setCoreStats(nextCoreStats);
     }
 
@@ -282,24 +327,31 @@ export function App() {
     const channelsResponse = await fetch(`${gatewayHttp}/db/channels?token=${encodeURIComponent(accessToken)}`);
     if (channelsResponse.ok) {
       const body = await channelsResponse.json();
-      if (tokenRef.current !== accessToken) return;
+      if (tokenRef.current !== accessToken) return false;
       setPersistedChannels(body.channels);
     }
+    return true;
   }
 
   async function createToken() {
-    const response = await fetch(`${gatewayHttp}/auth/dev-token`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ username })
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${gatewayHttp}/auth/dev-token`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username })
+      });
+    } catch {
+      setError("Unable to reach the server. Please try again.");
+      return "";
+    }
     if (!response.ok) {
       setError(await responseError(response));
       return "";
     }
     const body = await response.json();
     startSession(body.access_token, username);
-    await refreshStats(body.access_token);
+    await refreshStats(body.access_token).catch(() => false);
     if (tokenRef.current === body.access_token) {
       connect(body.access_token);
     }
@@ -308,18 +360,24 @@ export function App() {
 
   async function authenticate(path: "register" | "login") {
     setError("");
-    const response = await fetch(`${gatewayHttp}/auth/${path}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ username, password })
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${gatewayHttp}/auth/${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+    } catch {
+      setError("Unable to reach the server. Please try again.");
+      return "";
+    }
     if (!response.ok) {
       setError(await responseError(response));
       return "";
     }
     const body = await response.json();
     startSession(body.access_token, username);
-    await refreshStats(body.access_token);
+    await refreshStats(body.access_token).catch(() => false);
     if (tokenRef.current === body.access_token) {
       connect(body.access_token);
     }
@@ -333,6 +391,7 @@ export function App() {
     reconnectAttemptRef.current = 0;
     setToken(accessToken);
     setAuthenticatedUsername(signedInUsername);
+    window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({ token: accessToken, username: signedInUsername }));
     setPassword("");
     setError("");
   }
@@ -373,6 +432,7 @@ export function App() {
     allowReconnectRef.current = false;
     tokenRef.current = "";
     activeChannelRef.current = "";
+    clearStoredSession();
     if (reconnectTimerRef.current !== null) {
       window.clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
@@ -569,7 +629,14 @@ export function App() {
   }
 
   useEffect(() => {
-    refreshHealth().catch((exc: Error) => setError(exc.message));
+    refreshHealth().catch(() => undefined);
+    if (initialSession) {
+      void refreshStats(initialSession.token)
+        .then((valid) => {
+          if (valid && tokenRef.current === initialSession.token) connect(initialSession.token);
+        })
+        .catch(() => undefined);
+    }
     return () => {
       allowReconnectRef.current = false;
       if (reconnectTimerRef.current !== null) {

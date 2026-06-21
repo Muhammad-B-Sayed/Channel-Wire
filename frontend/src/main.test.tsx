@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { App } from "./main";
+import { App, SESSION_STORAGE_KEY } from "./main";
 
 class MockWebSocket {
   static readonly CONNECTING = 0;
@@ -45,6 +45,9 @@ class MockWebSocket {
 }
 
 let authResponse: Response;
+let statsResponse: Response;
+let healthUnavailable: boolean;
+let authUnavailable: boolean;
 
 function jsonResponse(body: object, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -58,6 +61,8 @@ function installFetchMock() {
     "fetch",
     vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
+      if (url.endsWith("/health") && healthUnavailable) throw new TypeError("Failed to fetch");
+      if (url.includes("/auth/") && authUnavailable) throw new TypeError("Failed to fetch");
       if (url.includes("/auth/")) return authResponse.clone();
       if (url.endsWith("/health")) return jsonResponse({ status: "ok", core_host: "127.0.0.1", core_port: 5555 });
       if (url.includes("/core-stats")) {
@@ -74,7 +79,7 @@ function installFetchMock() {
         });
       }
       if (url.includes("/stats")) {
-        return jsonResponse({ users: 1, channels: 0, memberships: 0, messages: 0, channel_messages: 0, direct_messages: 0 });
+        return statsResponse.clone();
       }
       if (url.includes("/db/channels")) return jsonResponse({ channels: [] });
       return jsonResponse({ messages: [] });
@@ -91,14 +96,19 @@ async function login() {
 
 describe("authenticated session lifecycle", () => {
   beforeEach(() => {
+    window.localStorage.clear();
     MockWebSocket.instances = [];
     authResponse = jsonResponse({ access_token: "test-token", token_type: "bearer" });
+    statsResponse = jsonResponse({ users: 1, channels: 0, memberships: 0, messages: 0, channel_messages: 0, direct_messages: 0 });
+    healthUnavailable = false;
+    authUnavailable = false;
     installFetchMock();
     vi.stubGlobal("WebSocket", MockWebSocket);
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    window.localStorage.clear();
     vi.unstubAllGlobals();
   });
 
@@ -156,18 +166,104 @@ describe("authenticated session lifecycle", () => {
     expect(screen.getByRole("button", { name: "Register" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Messaging")).not.toBeInTheDocument();
     expect(screen.queryByText("private session event")).not.toBeInTheDocument();
+    expect(window.localStorage.getItem(SESSION_STORAGE_KEY)).toBeNull();
+  });
+});
+
+describe("logged-out startup", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    MockWebSocket.instances = [];
+    authResponse = jsonResponse({ access_token: "test-token", token_type: "bearer" });
+    statsResponse = jsonResponse({ users: 1, channels: 0, memberships: 0, messages: 0, channel_messages: 0, direct_messages: 0 });
+    healthUnavailable = false;
+    authUnavailable = false;
+    installFetchMock();
+    vi.stubGlobal("WebSocket", MockWebSocket);
+  });
+
+  afterEach(() => {
+    window.localStorage.clear();
+    vi.unstubAllGlobals();
+  });
+
+  it("shows the normal logged-out screen without background network errors", async () => {
+    healthUnavailable = true;
+    render(<App />);
+
+    expect(screen.getByRole("button", { name: "Login" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Register" })).toBeInTheDocument();
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    expect(screen.queryByText("Failed to fetch")).not.toBeInTheDocument();
+    expect(screen.queryByText("Unable to reach the server. Please try again.")).not.toBeInTheDocument();
+    expect(MockWebSocket.instances).toHaveLength(0);
+  });
+
+  it("clears an invalid stored session without connecting", async () => {
+    const payload = btoa(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 }))
+      .replace(/=/g, "")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_");
+    window.localStorage.setItem(
+      SESSION_STORAGE_KEY,
+      JSON.stringify({ token: `header.${payload}.signature`, username: "alice" })
+    );
+    statsResponse = jsonResponse({ detail: "invalid token" }, 401);
+
+    render(<App />);
+
+    await screen.findByRole("button", { name: "Login" });
+    expect(window.localStorage.getItem(SESSION_STORAGE_KEY)).toBeNull();
+    expect(MockWebSocket.instances).toHaveLength(0);
+    expect(screen.queryByText("Failed to fetch")).not.toBeInTheDocument();
+  });
+
+  it("clears an expired stored session before making authenticated requests", () => {
+    const payload = btoa(JSON.stringify({ exp: Math.floor(Date.now() / 1000) - 60 }))
+      .replace(/=/g, "")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_");
+    window.localStorage.setItem(
+      SESSION_STORAGE_KEY,
+      JSON.stringify({ token: `header.${payload}.signature`, username: "alice" })
+    );
+
+    render(<App />);
+
+    expect(screen.getByRole("button", { name: "Login" })).toBeInTheDocument();
+    expect(window.localStorage.getItem(SESSION_STORAGE_KEY)).toBeNull();
+    expect(MockWebSocket.instances).toHaveLength(0);
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/stats"))).toBe(false);
+  });
+
+  it.each(["Login", "Register"] as const)("shows a friendly error when an active %s cannot reach the backend", async (action) => {
+    authUnavailable = true;
+    render(<App />);
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "correct-horse-battery" } });
+    fireEvent.click(screen.getByRole("button", { name: action }));
+
+    expect(await screen.findByText("Unable to reach the server. Please try again.")).toBeInTheDocument();
+    expect(screen.queryByText("Failed to fetch")).not.toBeInTheDocument();
+    expect(MockWebSocket.instances).toHaveLength(0);
   });
 });
 
 describe("user-friendly errors", () => {
   beforeEach(() => {
+    window.localStorage.clear();
     MockWebSocket.instances = [];
     authResponse = jsonResponse({ access_token: "test-token", token_type: "bearer" });
+    statsResponse = jsonResponse({ users: 1, channels: 0, memberships: 0, messages: 0, channel_messages: 0, direct_messages: 0 });
+    healthUnavailable = false;
+    authUnavailable = false;
     installFetchMock();
     vi.stubGlobal("WebSocket", MockWebSocket);
   });
 
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    window.localStorage.clear();
+    vi.unstubAllGlobals();
+  });
 
   it("converts technical password validation responses", async () => {
     authResponse = jsonResponse(
