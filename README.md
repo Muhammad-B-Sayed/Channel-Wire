@@ -31,7 +31,7 @@ ChannelWire is more than a chat UI. It demonstrates how to connect low-level net
 | Protocol | Custom binary frames |
 | Gateway | FastAPI, WebSockets, PyJWT |
 | Persistence | PostgreSQL, SQLite for local tests, SQLAlchemy, Alembic |
-| Frontend | React, TypeScript, Vite, lucide-react |
+| Frontend | React, TypeScript, CSS, Node.js, Vite, lucide-react |
 | Local runtime | Docker Compose |
 | Deployment | Render backend, Vercel frontend |
 | Quality | GitHub Actions, sanitizer builds, integration/load/malformed-frame tests |
