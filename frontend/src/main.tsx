@@ -772,7 +772,7 @@ export function App() {
               {channels.length > 0 ? (
                 channels.map((item) => <li key={item}>{item}</li>)
               ) : (
-                <li className="emptyListItem">Connect to list channels</li>
+                <li className="emptyListItem">{connected ? "No live channels yet" : "Connect to list channels"}</li>
               )}
             </ul>
           </div>
@@ -782,7 +782,11 @@ export function App() {
               <Users size={18} />
               Participants{activeChannel ? ` in #${activeChannel}` : ""}
             </div>
-            <button className="iconButton" disabled={!connected} onClick={() => send({ type: "who" })}>
+            <button
+              className="iconButton"
+              disabled={!connected || !activeChannel}
+              onClick={() => send({ type: "who" })}
+            >
               <RefreshCw size={16} />
               Refresh
             </button>
@@ -790,7 +794,13 @@ export function App() {
               {users.length > 0 ? (
                 users.map((item) => <li key={item}>{item}</li>)
               ) : (
-                <li className="emptyListItem">Connect to see active users</li>
+                <li className="emptyListItem">
+                  {!connected
+                    ? "Connect to see active users"
+                    : activeChannel
+                      ? "No active participants"
+                      : "Join a channel to see participants"}
+                </li>
               )}
             </ul>
           </div>
@@ -886,11 +896,12 @@ export function App() {
           <form onSubmit={sendChat} className="composer">
             <MessagesSquare size={18} />
             <input
+              aria-label="Message or command"
               name="message"
               autoComplete="off"
               value={message}
               onChange={(event) => setMessage(event.target.value)}
-              placeholder={`Message #${channel}…`}
+              placeholder={activeChannel ? `Message #${activeChannel}…` : "Type a command…"}
             />
             <button disabled={!connected}>
               <Send size={16} />
@@ -925,7 +936,7 @@ export function App() {
                   placeholder="Write a private message…"
                 />
               </label>
-              <button disabled={!connected || !dmTo.trim() || !dmText.trim()}>Send DM</button>
+              <button disabled={!connected}>Send DM</button>
               <button type="button" className="iconButton" onClick={loadDirectHistory}>
                 <History size={16} />
                 History
