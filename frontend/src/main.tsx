@@ -2,6 +2,7 @@ import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Activity,
+  AlertCircle,
   Circle,
   HelpCircle,
   Hash,
@@ -12,7 +13,8 @@ import {
   RefreshCw,
   Send,
   Trash2,
-  Users
+  Users,
+  X
 } from "lucide-react";
 import "./styles.css";
 
@@ -629,7 +631,7 @@ export function App() {
   }
 
   useEffect(() => {
-    refreshHealth().catch(() => undefined);
+    refreshHealth().catch(() => setError("Gateway unavailable. Check that the API is running, then refresh."));
     if (initialSession) {
       void refreshStats(initialSession.token)
         .then((valid) => {
@@ -675,15 +677,22 @@ export function App() {
           <div className="connectionControls">
             <label>
               <span>Username</span>
-              <input value={username} onChange={(event) => setUsername(event.target.value)} />
+              <input
+                name="username"
+                autoComplete="username"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+              />
             </label>
             <label>
               <span>Password</span>
               <input
                 type="password"
+                name="password"
+                autoComplete="current-password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                placeholder="8+ chars"
+                placeholder="8+ characters…"
               />
             </label>
             <button type="button" className="iconButton" onClick={() => authenticate("register")}>
@@ -718,28 +727,30 @@ export function App() {
             </div>
             <dl>
               <dt>Gateway</dt>
-              <dd>{health?.status ?? "unknown"}</dd>
+              <dd>{health?.status ?? "Unknown"}</dd>
               <dt>Core</dt>
-              <dd>{health ? `${health.core_host}:${health.core_port}` : "checking"}</dd>
+              <dd>{health ? `${health.core_host}:${health.core_port}` : "Checking…"}</dd>
               <dt>Users</dt>
-              <dd>{platformStats?.users ?? "-"}</dd>
+              <dd>{platformStats?.users ?? "—"}</dd>
               <dt>Channels</dt>
-              <dd>{platformStats?.channels ?? "-"}</dd>
+              <dd>{platformStats?.channels ?? "—"}</dd>
               <dt>Members</dt>
-              <dd>{platformStats?.memberships ?? "-"}</dd>
+              <dd>{platformStats?.memberships ?? "—"}</dd>
               <dt>Stored</dt>
-              <dd>{platformStats?.messages ?? "-"}</dd>
+              <dd>{platformStats?.messages ?? "—"}</dd>
               <dt>Core Clients</dt>
-              <dd>{coreStats?.registered_clients ?? "-"}</dd>
+              <dd>{coreStats?.registered_clients ?? "—"}</dd>
               <dt>Queue Drops</dt>
-              <dd>{coreStats?.queue_disconnects ?? "-"}</dd>
+              <dd>{coreStats?.queue_disconnects ?? "—"}</dd>
               <dt>Events</dt>
               <dd>{stats.events}</dd>
             </dl>
             <button
               className="iconButton"
               onClick={() => {
-                refreshHealth().catch((exc: Error) => setError(exc.message));
+                refreshHealth().catch(() =>
+                  setError("Gateway unavailable. Check that the API is running, then refresh.")
+                );
                 refreshStats().catch((exc: Error) => setError(exc.message));
               }}
             >
@@ -753,14 +764,16 @@ export function App() {
               <Hash size={18} />
               Live Channels
             </div>
-            <button className="iconButton" onClick={() => send({ type: "list" })}>
+            <button className="iconButton" disabled={!connected} onClick={() => send({ type: "list" })}>
               <RefreshCw size={16} />
               List
             </button>
             <ul className="compactList">
-              {channels.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
+              {channels.length > 0 ? (
+                channels.map((item) => <li key={item}>{item}</li>)
+              ) : (
+                <li className="emptyListItem">Connect to list channels</li>
+              )}
             </ul>
           </div>
 
@@ -769,14 +782,16 @@ export function App() {
               <Users size={18} />
               Participants{activeChannel ? ` in #${activeChannel}` : ""}
             </div>
-            <button className="iconButton" onClick={() => send({ type: "who" })}>
+            <button className="iconButton" disabled={!connected} onClick={() => send({ type: "who" })}>
               <RefreshCw size={16} />
               Refresh
             </button>
             <ul className="compactList">
-              {users.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
+              {users.length > 0 ? (
+                users.map((item) => <li key={item}>{item}</li>)
+              ) : (
+                <li className="emptyListItem">Connect to see active users</li>
+              )}
             </ul>
           </div>
 
@@ -786,9 +801,11 @@ export function App() {
               Persisted Channels
             </div>
             <ul className="compactList">
-              {persistedChannels.map((item) => (
-                <li key={item.name}>{item.name}</li>
-              ))}
+              {persistedChannels.length > 0 ? (
+                persistedChannels.map((item) => <li key={item.name}>{item.name}</li>)
+              ) : (
+                <li className="emptyListItem">No stored channels yet</li>
+              )}
             </ul>
           </div>
 
@@ -798,8 +815,14 @@ export function App() {
           <div className="toolbar">
             <form onSubmit={joinChannel} className="channelForm">
               <Hash size={18} />
-              <input value={channel} onChange={(event) => setChannel(event.target.value)} />
-              <button>Join</button>
+              <input
+                aria-label="Channel name"
+                name="channel"
+                autoComplete="off"
+                value={channel}
+                onChange={(event) => setChannel(event.target.value)}
+              />
+              <button disabled={!connected}>Join</button>
             </form>
             <button className="iconButton" onClick={loadHistory}>
               <History size={16} />
@@ -815,25 +838,61 @@ export function App() {
             </button>
           </div>
 
-          {error && <div className="errorBanner">{error}</div>}
+          {error && (
+            <div className="errorBanner" role="alert">
+              <AlertCircle size={17} aria-hidden="true" />
+              <span>{error}</span>
+              <button type="button" className="dismissButton" aria-label="Dismiss error" onClick={() => setError("")}>
+                <X size={16} />
+              </button>
+            </div>
+          )}
 
           <div className="messages">
-            {messages.map((item) => (
-              <article key={item.id} className={`message ${item.kind}`}>
-                <header>
-                  <span>{item.sender ?? item.kind}</span>
-                  {item.channel && <small>#{item.channel}</small>}
-                </header>
-                <p>{item.text}</p>
-              </article>
-            ))}
+            {messages.length > 0 ? (
+              messages.map((item) => (
+                <article key={item.id} className={`message ${item.kind}`}>
+                  <header>
+                    <span>{item.sender ?? item.kind}</span>
+                    {item.channel && <small>#{item.channel}</small>}
+                  </header>
+                  <p>{item.text}</p>
+                </article>
+              ))
+            ) : (
+              <div className="emptyState">
+                <div className="emptyStateIcon">
+                  <MessagesSquare size={22} aria-hidden="true" />
+                </div>
+                <strong>
+                  {connected
+                    ? activeChannel
+                      ? `Ready in #${activeChannel}`
+                      : "Connected to ChannelWire"
+                    : "Reconnecting to ChannelWire"}
+                </strong>
+                <p>
+                  {connected
+                    ? activeChannel
+                      ? "Send a message below, or use /help to explore commands."
+                      : "Join a channel above to start messaging."
+                    : "The realtime stream will resume automatically when the gateway is available."}
+                </p>
+              </div>
+            )}
             <div ref={messagesEndRef} />
           </div>
 
           <form onSubmit={sendChat} className="composer">
             <MessagesSquare size={18} />
-            <input value={message} onChange={(event) => setMessage(event.target.value)} placeholder={`Message #${channel}`} />
-            <button>
+            <input
+              name="message"
+              autoComplete="off"
+              value={message}
+              onChange={(event) => setMessage(event.target.value)}
+              placeholder={`Message #${channel}…`}
+            />
+            <button disabled={!connected}>
               <Send size={16} />
               Send
             </button>
@@ -849,13 +908,24 @@ export function App() {
             <form onSubmit={sendDirect} className="stackForm">
               <label>
                 <span>To</span>
-                <input value={dmTo} onChange={(event) => setDmTo(event.target.value)} />
+                <input
+                  name="recipient"
+                  autoComplete="off"
+                  value={dmTo}
+                  onChange={(event) => setDmTo(event.target.value)}
+                  placeholder="Username…"
+                />
               </label>
               <label>
                 <span>Message</span>
-                <textarea value={dmText} onChange={(event) => setDmText(event.target.value)} />
+                <textarea
+                  name="direct-message"
+                  value={dmText}
+                  onChange={(event) => setDmText(event.target.value)}
+                  placeholder="Write a private message…"
+                />
               </label>
-              <button>Send DM</button>
+              <button disabled={!connected || !dmTo.trim() || !dmText.trim()}>Send DM</button>
               <button type="button" className="iconButton" onClick={loadDirectHistory}>
                 <History size={16} />
                 History
@@ -932,7 +1002,15 @@ export function App() {
           <div className="panel">
             <h2>Sign in to ChannelWire</h2>
             <p>Log in or register to access channels, messages, and monitoring.</p>
-            {error && <div className="errorBanner">{error}</div>}
+            {error && (
+              <div className="errorBanner" role="alert">
+                <AlertCircle size={17} aria-hidden="true" />
+                <span>{error}</span>
+                <button type="button" className="dismissButton" aria-label="Dismiss error" onClick={() => setError("")}>
+                  <X size={16} />
+                </button>
+              </div>
+            )}
           </div>
         </section>
       )}

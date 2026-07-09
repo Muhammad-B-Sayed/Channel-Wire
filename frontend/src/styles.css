@@ -1,6 +1,7 @@
 :root {
   background: #101820;
   color: #e5edf3;
+  color-scheme: dark;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
@@ -45,7 +46,7 @@ button {
   color: #07131d;
   cursor: pointer;
   display: inline-flex;
-  font-weight: 800;
+  font-weight: 700;
   gap: 8px;
   justify-content: center;
   min-height: 38px;
@@ -53,8 +54,21 @@ button {
   white-space: nowrap;
 }
 
-button:hover {
+button:not(:disabled):hover {
   background: var(--primary-strong);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  border-color: var(--primary-strong);
+  outline: 3px solid rgb(85 166 214 / 28%);
+  outline-offset: 2px;
 }
 
 input,
@@ -259,6 +273,7 @@ dt {
 
 dd {
   color: var(--text);
+  font-variant-numeric: tabular-nums;
   margin: 0;
   overflow-wrap: anywhere;
 }
@@ -268,7 +283,7 @@ dd {
   color: var(--primary-strong);
 }
 
-.iconButton:hover {
+.iconButton:not(:disabled):hover {
   background: #28445a;
 }
 
@@ -282,6 +297,12 @@ dd {
 .compactList li {
   border-top: 1px solid var(--border-soft);
   padding: 8px 0;
+}
+
+.compactList .emptyListItem {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .chatSurface {
@@ -317,10 +338,28 @@ dd {
 }
 
 .errorBanner {
+  align-items: center;
   background: #3a211f;
   border-bottom: 1px solid #653631;
   color: #ffafa4;
+  display: flex;
+  gap: 8px;
   padding: 10px 12px;
+}
+
+.errorBanner span {
+  flex: 1;
+}
+
+.dismissButton {
+  background: transparent;
+  color: inherit;
+  min-height: 32px;
+  padding: 0 6px;
+}
+
+.dismissButton:hover {
+  background: rgb(255 175 164 / 10%);
 }
 
 .messages {
@@ -331,6 +370,39 @@ dd {
   min-height: 0;
   overflow: auto;
   padding: 12px;
+}
+
+.emptyState {
+  align-self: center;
+  color: var(--muted);
+  justify-self: center;
+  max-width: 360px;
+  padding: 32px 20px;
+  text-align: center;
+}
+
+.emptyStateIcon {
+  align-items: center;
+  background: var(--primary-muted);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  color: var(--primary-strong);
+  display: inline-flex;
+  height: 48px;
+  justify-content: center;
+  margin-bottom: 14px;
+  width: 48px;
+}
+
+.emptyState strong {
+  color: var(--text);
+  display: block;
+  font-size: 16px;
+  margin-bottom: 6px;
+}
+
+.emptyState p {
+  line-height: 1.55;
 }
 
 .message {
@@ -397,6 +469,7 @@ dd {
   color: var(--text);
   display: block;
   font-size: 24px;
+  font-variant-numeric: tabular-nums;
 }
 
 .metricGrid span {
@@ -426,6 +499,7 @@ dd {
 .meterLabel strong {
   color: var(--text);
   font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 
 .meterTrack {
@@ -503,6 +577,12 @@ dd {
 }
 
 @media (max-width: 980px) {
+  .appShell {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+
   .topbar,
   .workspace {
     display: grid;
@@ -520,6 +600,7 @@ dd {
 
   .sidebar {
     max-height: none;
+    overflow: visible;
   }
 
   .chatSurface {
@@ -530,5 +611,30 @@ dd {
   .toolbar {
     align-items: stretch;
     display: grid;
+  }
+}
+
+@media (max-width: 560px) {
+  .topbar,
+  .workspace {
+    padding: 12px;
+  }
+
+  .channelForm {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .channelForm button {
+    grid-column: 2;
+  }
+
+  .composer {
+    align-items: stretch;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .composer button {
+    grid-column: 2;
   }
 }
