@@ -41,7 +41,7 @@ ChannelWire is more than a chat UI. It demonstrates how to connect low-level net
 Example browser workflow:
 
 ```text
-Register/Login -> Connect -> Join #general -> Send messages -> Load history -> Monitor stats
+Register/Login -> Automatic gateway connection -> Browse channels -> Join #general -> Send messages -> Monitor stats
 ```
 
 Example CLI session against the TCP core:
@@ -139,10 +139,12 @@ docker compose down -v
 
 The dashboard is the main app UI. Locally it is available at `http://127.0.0.1:3000`.
 
-1. Register a username and password, or use Dev Token in local/demo mode.
-2. Log in to receive a JWT.
-3. Connect to the WebSocket gateway.
-4. Join a channel, send channel messages, send direct messages, inspect history, and monitor server stats.
+1. Register a username and password, log in, or use Dev Token in local/demo mode.
+2. The dashboard stores the JWT until it expires or you log out, then connects to the WebSocket gateway automatically.
+3. Browse the automatically loaded live-channel list and join a channel; the participant list refreshes for the active channel.
+4. Send channel or direct messages, inspect history, and monitor server stats. If the realtime connection drops, the dashboard reconnects and rejoins the active channel automatically.
+
+Loading, empty, disconnected, and gateway-error states include next-step guidance, and controls that need a live connection or active channel remain disabled until they can be used. The three-column console stacks into a single-column layout on narrower screens so the status, messaging, and direct-message panels remain accessible.
 
 Production disables Dev Token by default with:
 
@@ -503,6 +505,7 @@ make test
 make test-gateway
 make test-migrations
 make frontend-build
+npm --prefix frontend test
 docker compose config
 docker build -f Dockerfile -t channelwire-render-test .
 docker build -f Dockerfile.core -t channelwire-core-test .
@@ -539,6 +542,7 @@ What they cover:
 | `make test-migrations` | fresh Alembic upgrade and legacy schema adoption |
 | `make test-compose` | full Docker Compose stack smoke test |
 | `make sanitize` | sanitizer-enabled C build |
+| `npm --prefix frontend test` | dashboard session, reconnect, loading/empty-state, validation, and error behavior |
 
 GitHub Actions runs CI from `.github/workflows/ci.yml`.
 
