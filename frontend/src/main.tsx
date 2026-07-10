@@ -80,6 +80,7 @@ const gatewayWs = gatewayHttp.replace(/^http/, "ws");
 const devTokenEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEV_TOKEN === "1";
 const MESSAGE_LIMIT = 80;
 const RECONNECT_MAX_DELAY_MS = 10_000;
+const GATEWAY_HEALTH_ERROR = "Gateway unavailable. Check that the API is running, then refresh.";
 export const SESSION_STORAGE_KEY = "channelwire-session";
 const HELP_TEXT = `Commands:
 /help - show this help
@@ -207,13 +208,16 @@ export function App() {
   const [connected, setConnected] = useState(false);
   const [messages, setMessages] = useState<ChatLine[]>([]);
   const [users, setUsers] = useState<string[]>([]);
+  const [usersLoaded, setUsersLoaded] = useState(false);
   const [channels, setChannels] = useState<string[]>([]);
+  const [channelsLoaded, setChannelsLoaded] = useState(false);
   const [health, setHealth] = useState<Health | null>(null);
   const [platformStats, setPlatformStats] = useState<PlatformStats | null>(null);
   const [coreStats, setCoreStats] = useState<CoreStats | null>(null);
   const [monitorSamples, setMonitorSamples] = useState<MonitorSample[]>([]);
   const [persistedChannels, setPersistedChannels] = useState<PersistedChannel[]>([]);
   const [error, setError] = useState("");
+  const [healthError, setHealthError] = useState("");
   const socketRef = useRef<WebSocket | null>(null);
   const tokenRef = useRef(initialSession?.token ?? "");
   const activeChannelRef = useRef("");
@@ -289,11 +293,17 @@ export function App() {
   }
 
   async function refreshHealth() {
-    const response = await fetch(`${gatewayHttp}/health`);
-    if (!response.ok) {
-      throw new Error("gateway health check failed");
+    try {
+      const response = await fetch(`${gatewayHttp}/health`);
+      if (!response.ok) {
+        throw new Error("gateway health check failed");
+      }
+      setHealth(await response.json());
+      setHealthError("");
+    } catch {
+      setHealth(null);
+      setHealthError(GATEWAY_HEALTH_ERROR);
     }
-    setHealth(await response.json());
   }
 
   async function refreshStats(accessToken = token): Promise<boolean> {
@@ -411,6 +421,8 @@ export function App() {
     ws.onopen = () => {
       reconnectAttemptRef.current = 0;
       setConnected(true);
+      setChannelsLoaded(false);
+      ws.send(JSON.stringify({ type: "list" }));
       pushLine({ kind: "status", text: "WebSocket connected" });
     };
     ws.onmessage = (event) => handleGatewayEvent(JSON.parse(event.data), ws);
@@ -419,6 +431,8 @@ export function App() {
         socketRef.current = null;
       }
       setConnected(false);
+      setChannelsLoaded(false);
+      setUsersLoaded(false);
       if (!allowReconnectRef.current || !tokenRef.current) {
         return;
       }
@@ -455,7 +469,9 @@ export function App() {
     setDmText("");
     setMessages([]);
     setUsers([]);
+    setUsersLoaded(false);
     setChannels([]);
+    setChannelsLoaded(false);
     setPlatformStats(null);
     setCoreStats(null);
     setMonitorSamples([]);
@@ -470,6 +486,18 @@ export function App() {
     }
     socketRef.current.send(JSON.stringify(command));
     return true;
+  }
+
+  function requestChannels() {
+    if (send({ type: "list" })) {
+      setChannelsLoaded(false);
+    }
+  }
+
+  function requestUsers() {
+    if (send({ type: "who" })) {
+      setUsersLoaded(false);
+    }
   }
 
   function handleGatewayEvent(event: GatewayEvent, sourceSocket = socketRef.current) {
@@ -489,11 +517,12 @@ export function App() {
         activeChannelRef.current = nextActiveChannel;
         setActiveChannel(nextActiveChannel);
         setUsers([]);
-        send({ type: "who" });
+        requestUsers();
       } else if (event.type === "ok" && event.message === "left channel") {
         activeChannelRef.current = "";
         setActiveChannel("");
         setUsers([]);
+        setUsersLoaded(false);
       }
     } else if (event.type === "error") {
       const message = friendlyGatewayError(event.message);
@@ -501,8 +530,10 @@ export function App() {
       setError(message);
     } else if (event.type === "who") {
       setUsers(event.users);
+      setUsersLoaded(true);
     } else if (event.type === "channels") {
       setChannels(event.channels);
+      setChannelsLoaded(true);
     }
     refreshStats().catch(() => undefined);
   }
@@ -510,7 +541,7 @@ export function App() {
   function joinChannel(event: FormEvent) {
     event.preventDefault();
     send({ type: "join", channel });
-    setTimeout(() => send({ type: "list" }), 100);
+    setTimeout(requestChannels, 100);
   }
 
   function sendChat(event: FormEvent) {
@@ -544,7 +575,7 @@ export function App() {
       setChannel(parts[0]);
       send({ type: command, channel: parts[0] });
       if (command === "join") {
-        setTimeout(() => send({ type: "list" }), 100);
+        setTimeout(requestChannels, 100);
       }
     } else if (command === "dm") {
       if (!parts[0] || !parts[1]) {
@@ -552,8 +583,10 @@ export function App() {
         return;
       }
       send({ type: "dm", to: parts[0], text: parts.slice(1).join(" ") });
-    } else if (command === "who" || command === "list") {
-      send({ type: command });
+    } else if (command === "who") {
+      requestUsers();
+    } else if (command === "list") {
+      requestChannels();
     } else if (command === "quit") {
       logout();
     } else if (command === "stats") {
@@ -631,7 +664,7 @@ export function App() {
   }
 
   useEffect(() => {
-    refreshHealth().catch(() => setError("Gateway unavailable. Check that the API is running, then refresh."));
+    void refreshHealth();
     if (initialSession) {
       void refreshStats(initialSession.token)
         .then((valid) => {
@@ -748,9 +781,7 @@ export function App() {
             <button
               className="iconButton"
               onClick={() => {
-                refreshHealth().catch(() =>
-                  setError("Gateway unavailable. Check that the API is running, then refresh.")
-                );
+                void refreshHealth();
                 refreshStats().catch((exc: Error) => setError(exc.message));
               }}
             >
@@ -764,15 +795,19 @@ export function App() {
               <Hash size={18} />
               Live Channels
             </div>
-            <button className="iconButton" disabled={!connected} onClick={() => send({ type: "list" })}>
+            <button className="iconButton" disabled={!connected} onClick={requestChannels}>
               <RefreshCw size={16} />
               List
             </button>
             <ul className="compactList">
-              {channels.length > 0 ? (
+              {!connected ? (
+                <li className="emptyListItem">Connect to list channels</li>
+              ) : !channelsLoaded ? (
+                <li className="emptyListItem">Loading live channels…</li>
+              ) : channels.length > 0 ? (
                 channels.map((item) => <li key={item}>{item}</li>)
               ) : (
-                <li className="emptyListItem">{connected ? "No live channels yet" : "Connect to list channels"}</li>
+                <li className="emptyListItem">No live channels yet</li>
               )}
             </ul>
           </div>
@@ -785,22 +820,22 @@ export function App() {
             <button
               className="iconButton"
               disabled={!connected || !activeChannel}
-              onClick={() => send({ type: "who" })}
+              onClick={requestUsers}
             >
               <RefreshCw size={16} />
               Refresh
             </button>
             <ul className="compactList">
-              {users.length > 0 ? (
+              {!connected ? (
+                <li className="emptyListItem">Connect to see active users</li>
+              ) : !activeChannel ? (
+                <li className="emptyListItem">Join a channel to see participants</li>
+              ) : !usersLoaded ? (
+                <li className="emptyListItem">Loading participants…</li>
+              ) : users.length > 0 ? (
                 users.map((item) => <li key={item}>{item}</li>)
               ) : (
-                <li className="emptyListItem">
-                  {!connected
-                    ? "Connect to see active users"
-                    : activeChannel
-                      ? "No active participants"
-                      : "Join a channel to see participants"}
-                </li>
+                <li className="emptyListItem">No active participants</li>
               )}
             </ul>
           </div>
@@ -848,11 +883,16 @@ export function App() {
             </button>
           </div>
 
-          {error && (
+          {(error || healthError) && (
             <div className="errorBanner" role="alert">
               <AlertCircle size={17} aria-hidden="true" />
-              <span>{error}</span>
-              <button type="button" className="dismissButton" aria-label="Dismiss error" onClick={() => setError("")}>
+              <span>{error || healthError}</span>
+              <button
+                type="button"
+                className="dismissButton"
+                aria-label="Dismiss error"
+                onClick={() => (error ? setError("") : setHealthError(""))}
+              >
                 <X size={16} />
               </button>
             </div>
@@ -1013,11 +1053,16 @@ export function App() {
           <div className="panel">
             <h2>Sign in to ChannelWire</h2>
             <p>Log in or register to access channels, messages, and monitoring.</p>
-            {error && (
+            {(error || healthError) && (
               <div className="errorBanner" role="alert">
                 <AlertCircle size={17} aria-hidden="true" />
-                <span>{error}</span>
-                <button type="button" className="dismissButton" aria-label="Dismiss error" onClick={() => setError("")}>
+                <span>{error || healthError}</span>
+                <button
+                  type="button"
+                  className="dismissButton"
+                  aria-label="Dismiss error"
+                  onClick={() => (error ? setError("") : setHealthError(""))}
+                >
                   <X size={16} />
                 </button>
               </div>

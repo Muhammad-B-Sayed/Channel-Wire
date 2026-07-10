@@ -134,14 +134,22 @@ describe("authenticated session lifecycle", () => {
     expect(screen.getByText("Connect to see active users")).toBeInTheDocument();
 
     act(() => socket.open());
-    expect(screen.getByText("No live channels yet")).toBeInTheDocument();
+    expect(screen.getByText("Loading live channels…")).toBeInTheDocument();
+    expect(socket.sent).toContain(JSON.stringify({ type: "list" }));
     expect(screen.getByText("Join a channel to see participants")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Refresh" })).toHaveLength(2);
     expect(screen.getAllByRole("button", { name: "Refresh" })[1]).toBeDisabled();
 
+    act(() => socket.message({ type: "channels", channels: [] }));
+    expect(screen.getByText("No live channels yet")).toBeInTheDocument();
+
     act(() => socket.message({ type: "ok", message: "joined general" }));
-    expect(screen.getByText("No active participants")).toBeInTheDocument();
+    expect(screen.getByText("Loading participants…")).toBeInTheDocument();
+    expect(socket.sent).toContain(JSON.stringify({ type: "who" }));
     expect(screen.getAllByRole("button", { name: "Refresh" })[1]).toBeEnabled();
+
+    act(() => socket.message({ type: "who", users: [] }));
+    expect(screen.getByText("No active participants")).toBeInTheDocument();
   });
 
   it("reconnects after an unexpected close", async () => {
@@ -330,5 +338,28 @@ describe("user-friendly errors", () => {
     fireEvent.click(sendButton);
 
     expect(screen.getByText("Enter a username.")).toBeInTheDocument();
+  });
+
+  it("clears a recovered health error without clearing an interaction error", async () => {
+    healthUnavailable = true;
+    render(<App />);
+    expect(await screen.findByText("Gateway unavailable. Check that the API is running, then refresh.")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "correct-horse-battery" } });
+    fireEvent.click(screen.getByRole("button", { name: "Login" }));
+    await screen.findByText("alice");
+    const socket = MockWebSocket.instances[0];
+    act(() => socket.open());
+
+    fireEvent.click(screen.getByRole("button", { name: "Send DM" }));
+    expect(screen.getByText("Enter a username.")).toBeInTheDocument();
+
+    healthUnavailable = false;
+    fireEvent.click(screen.getAllByRole("button", { name: "Refresh" })[0]);
+
+    await waitFor(() => expect(screen.getByText("ok")).toBeInTheDocument());
+    expect(screen.getByText("Enter a username.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss error" }));
+    expect(screen.queryByText("Gateway unavailable. Check that the API is running, then refresh.")).not.toBeInTheDocument();
   });
 });
