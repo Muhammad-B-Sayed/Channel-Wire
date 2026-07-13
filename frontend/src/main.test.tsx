@@ -90,7 +90,7 @@ function installFetchMock() {
 async function login() {
   render(<App />);
   fireEvent.change(await screen.findByLabelText("Password"), { target: { value: "correct-horse-battery" } });
-  fireEvent.click(screen.getByRole("button", { name: "Login" }));
+  fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
   await screen.findByText("alice");
 }
 
@@ -118,11 +118,11 @@ describe("authenticated session lifecycle", () => {
     expect(MockWebSocket.instances).toHaveLength(1);
     expect(MockWebSocket.instances[0].url).toContain("token=test-token");
     expect(screen.getByText("Signed in as")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Logout" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Login" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Register" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sign in" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create account" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Connect/ })).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Messaging")).toBeInTheDocument();
+    expect(screen.getByLabelText("Messages")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Message or command" })).toBeInTheDocument();
   });
 
@@ -130,26 +130,39 @@ describe("authenticated session lifecycle", () => {
     await login();
     const socket = MockWebSocket.instances[0];
 
-    expect(screen.getByText("Connect to list channels")).toBeInTheDocument();
-    expect(screen.getByText("Connect to see active users")).toBeInTheDocument();
+    expect(screen.getByText("Connect to view channels")).toBeInTheDocument();
+    expect(screen.getByText("Connect to view participants")).toBeInTheDocument();
 
     act(() => socket.open());
-    expect(screen.getByText("Loading live channels…")).toBeInTheDocument();
+    expect(screen.getByText("Loading channels…")).toBeInTheDocument();
     expect(socket.sent).toContain(JSON.stringify({ type: "list" }));
-    expect(screen.getByText("Join a channel to see participants")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Refresh" })).toHaveLength(2);
-    expect(screen.getAllByRole("button", { name: "Refresh" })[1]).toBeDisabled();
+    expect(screen.getByText("Join a channel to view participants")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Refresh participants" })).toBeDisabled();
 
     act(() => socket.message({ type: "channels", channels: [] }));
-    expect(screen.getByText("No live channels yet")).toBeInTheDocument();
+    expect(screen.getByText("No channels yet")).toBeInTheDocument();
 
     act(() => socket.message({ type: "ok", message: "joined general" }));
+    expect(screen.getByText("Joined #general.")).toBeInTheDocument();
     expect(screen.getByText("Loading participants…")).toBeInTheDocument();
     expect(socket.sent).toContain(JSON.stringify({ type: "who" }));
-    expect(screen.getAllByRole("button", { name: "Refresh" })[1]).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Refresh participants" })).toBeEnabled();
 
     act(() => socket.message({ type: "who", users: [] }));
-    expect(screen.getByText("No active participants")).toBeInTheDocument();
+    expect(screen.getByText("No participants in this channel")).toBeInTheDocument();
+  });
+
+  it("uses clear command guidance and validation", async () => {
+    await login();
+    const socket = MockWebSocket.instances[0];
+    act(() => socket.open());
+
+    fireEvent.click(screen.getByRole("button", { name: "View commands" }));
+    expect(screen.getByText(/\/quit — sign out/)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Message or command" }), { target: { value: "/join" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    expect(screen.getByText("Enter a channel name after /join.")).toBeInTheDocument();
   });
 
   it("reconnects after an unexpected close", async () => {
@@ -183,15 +196,15 @@ describe("authenticated session lifecycle", () => {
     });
     vi.useFakeTimers();
 
-    fireEvent.click(screen.getByRole("button", { name: "Logout" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
     act(() => vi.advanceTimersByTime(20_000));
 
     expect(socket.sent).toContain(JSON.stringify({ type: "quit" }));
     expect(socket.readyState).toBe(MockWebSocket.CLOSED);
     expect(MockWebSocket.instances).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "Login" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Register" })).toBeInTheDocument();
-    expect(screen.queryByLabelText("Messaging")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create account" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Messages")).not.toBeInTheDocument();
     expect(screen.queryByText("private session event")).not.toBeInTheDocument();
     expect(window.localStorage.getItem(SESSION_STORAGE_KEY)).toBeNull();
   });
@@ -226,14 +239,16 @@ describe("logged-out startup", () => {
 
     expect(screen.getByRole("status")).toHaveTextContent("Checking ChannelWire.");
     expect(screen.getByRole("progressbar", { name: "Checking gateway readiness" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Login" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sign in" })).not.toBeInTheDocument();
 
     await act(async () => {
       resolveHealth(jsonResponse({ status: "ok", core_host: "127.0.0.1", core_port: 5555 }));
     });
 
-    expect(await screen.findByRole("button", { name: "Login" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Register" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Sign in to ChannelWire" })).toBeInTheDocument();
+    expect(screen.getByText("Real-time messaging and system monitoring")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create account" })).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("ChannelWire is ready.");
   });
 
@@ -267,7 +282,7 @@ describe("logged-out startup", () => {
       resolveRetry(jsonResponse({ status: "ok", core_host: "127.0.0.1", core_port: 5555 }));
     });
 
-    expect(screen.getByRole("button", { name: "Login" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
     expect(retryFetch).toHaveBeenCalledTimes(1);
   });
 
@@ -300,7 +315,7 @@ describe("logged-out startup", () => {
 
     render(<App />);
 
-    await screen.findByRole("button", { name: "Login" });
+    await screen.findByRole("button", { name: "Sign in" });
     expect(window.localStorage.getItem(SESSION_STORAGE_KEY)).toBeNull();
     expect(MockWebSocket.instances).toHaveLength(0);
     expect(screen.queryByText("Failed to fetch")).not.toBeInTheDocument();
@@ -318,19 +333,19 @@ describe("logged-out startup", () => {
 
     render(<App />);
 
-    expect(await screen.findByRole("button", { name: "Login" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Sign in" })).toBeInTheDocument();
     expect(window.localStorage.getItem(SESSION_STORAGE_KEY)).toBeNull();
     expect(MockWebSocket.instances).toHaveLength(0);
     expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/stats"))).toBe(false);
   });
 
-  it.each(["Login", "Register"] as const)("shows a friendly error when an active %s cannot reach the backend", async (action) => {
+  it.each(["Sign in", "Create account"] as const)("shows a friendly error when %s cannot reach ChannelWire", async (action) => {
     authUnavailable = true;
     render(<App />);
     fireEvent.change(await screen.findByLabelText("Password"), { target: { value: "correct-horse-battery" } });
     fireEvent.click(screen.getByRole("button", { name: action }));
 
-    expect(await screen.findByText("Unable to reach the server. Please try again.")).toBeInTheDocument();
+    expect(await screen.findByText("Can’t reach ChannelWire. Try again.")).toBeInTheDocument();
     expect(screen.queryByText("Failed to fetch")).not.toBeInTheDocument();
     expect(MockWebSocket.instances).toHaveLength(0);
   });
@@ -369,33 +384,47 @@ describe("user-friendly errors", () => {
     );
     render(<App />);
     fireEvent.change(await screen.findByLabelText("Password"), { target: { value: "short" } });
-    fireEvent.click(screen.getByRole("button", { name: "Login" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
 
     expect(await screen.findByText("Password must be at least 8 characters.")).toBeInTheDocument();
   });
 
-  it("shows a clear error for invalid and unknown DM recipients", async () => {
+  it("converts invalid-credential responses into sign-in guidance", async () => {
+    authResponse = jsonResponse({ detail: "invalid username or password" }, 401);
+    render(<App />);
+    fireEvent.change(await screen.findByLabelText("Password"), { target: { value: "incorrect-password" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(await screen.findByText("Username or password is incorrect.")).toBeInTheDocument();
+  });
+
+  it("shows a clear error for invalid and unknown direct-message recipients", async () => {
     await login();
     const socket = MockWebSocket.instances[0];
     act(() => socket.open());
 
     fireEvent.change(screen.getByLabelText("To"), { target: { value: "not a user!" } });
     fireEvent.change(screen.getByLabelText("Message"), { target: { value: "hello" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send DM" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send direct message" }));
     expect(screen.getByText("User not found. Check the username and try again.")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("To"), { target: { value: "missing-user" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send DM" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send direct message" }));
     act(() => socket.message({ type: "error", message: "user not found" }));
     await waitFor(() => expect(screen.getAllByText("User not found. Check the username and try again.").length).toBeGreaterThan(0));
+
+    act(() => socket.message({ type: "error", message: "invalid direct message" }));
+    expect(
+      screen.getAllByText("Couldn’t send the direct message. Check the username and message, then try again.").length
+    ).toBeGreaterThan(0);
   });
 
-  it("keeps DM validation reachable after connecting", async () => {
+  it("keeps direct-message validation reachable after connecting", async () => {
     await login();
     const socket = MockWebSocket.instances[0];
     act(() => socket.open());
 
-    const sendButton = screen.getByRole("button", { name: "Send DM" });
+    const sendButton = screen.getByRole("button", { name: "Send direct message" });
     expect(sendButton).toBeEnabled();
     fireEvent.click(sendButton);
 
@@ -405,7 +434,7 @@ describe("user-friendly errors", () => {
   it("clears a recovered health error without clearing an interaction error", async () => {
     render(<App />);
     fireEvent.change(await screen.findByLabelText("Password"), { target: { value: "correct-horse-battery" } });
-    fireEvent.click(screen.getByRole("button", { name: "Login" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
     await screen.findByText("alice");
     const socket = MockWebSocket.instances[0];
     act(() => socket.open());
@@ -414,7 +443,7 @@ describe("user-friendly errors", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Refresh" })[0]);
     expect(await screen.findByText("Gateway unavailable. Check that the API is running, then refresh.")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Send DM" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send direct message" }));
     expect(screen.getByText("Enter a username.")).toBeInTheDocument();
 
     healthUnavailable = false;
