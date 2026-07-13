@@ -42,6 +42,8 @@ type Health = {
   core_port: number;
 };
 
+type BackendReadiness = "checking" | "ready" | "failed";
+
 type PlatformStats = {
   users: number;
   channels: number;
@@ -80,6 +82,9 @@ const gatewayWs = gatewayHttp.replace(/^http/, "ws");
 const devTokenEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEV_TOKEN === "1";
 const MESSAGE_LIMIT = 80;
 const RECONNECT_MAX_DELAY_MS = 10_000;
+const READINESS_MAX_ATTEMPTS = 6;
+const READINESS_RETRY_DELAY_MS = 2_500;
+const READINESS_REQUEST_TIMEOUT_MS = 3_000;
 const GATEWAY_HEALTH_ERROR = "Gateway unavailable. Check that the API is running, then refresh.";
 export const SESSION_STORAGE_KEY = "channelwire-session";
 const HELP_TEXT = `Commands:
@@ -218,6 +223,7 @@ export function App() {
   const [persistedChannels, setPersistedChannels] = useState<PersistedChannel[]>([]);
   const [error, setError] = useState("");
   const [healthError, setHealthError] = useState("");
+  const [backendReadiness, setBackendReadiness] = useState<BackendReadiness>("checking");
   const socketRef = useRef<WebSocket | null>(null);
   const tokenRef = useRef(initialSession?.token ?? "");
   const activeChannelRef = useRef("");
@@ -225,6 +231,11 @@ export function App() {
   const reconnectAttemptRef = useRef(0);
   const allowReconnectRef = useRef(Boolean(initialSession));
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const readinessRunRef = useRef(0);
+  const readinessAbortRef = useRef<AbortController | null>(null);
+  const readinessRequestTimerRef = useRef<number | null>(null);
+  const readinessRetryTimerRef = useRef<number | null>(null);
+  const restoredSessionStartedRef = useRef(false);
 
   const stats = useMemo(
     () => ({
@@ -290,6 +301,87 @@ export function App() {
         malformedFrames: core.malformed_frames
       }
     ]);
+  }
+
+  function clearReadinessTimers() {
+    if (readinessRequestTimerRef.current !== null) {
+      window.clearTimeout(readinessRequestTimerRef.current);
+      readinessRequestTimerRef.current = null;
+    }
+    if (readinessRetryTimerRef.current !== null) {
+      window.clearTimeout(readinessRetryTimerRef.current);
+      readinessRetryTimerRef.current = null;
+    }
+  }
+
+  function cancelReadinessCheck() {
+    readinessRunRef.current += 1;
+    readinessAbortRef.current?.abort();
+    readinessAbortRef.current = null;
+    clearReadinessTimers();
+  }
+
+  function startReadinessCheck() {
+    cancelReadinessCheck();
+    const run = readinessRunRef.current;
+    setBackendReadiness("checking");
+    setHealth(null);
+    setHealthError("");
+
+    const check = async (attempt: number) => {
+      const controller = new AbortController();
+      readinessAbortRef.current = controller;
+
+      try {
+        const response = await Promise.race<Response>([
+          fetch(`${gatewayHttp}/health`, { cache: "no-store", signal: controller.signal }),
+          new Promise<Response>((_, reject) => {
+            readinessRequestTimerRef.current = window.setTimeout(() => {
+              controller.abort();
+              reject(new Error("gateway readiness check timed out"));
+            }, READINESS_REQUEST_TIMEOUT_MS);
+          })
+        ]);
+        if (!response.ok) {
+          throw new Error("gateway readiness check failed");
+        }
+
+        const nextHealth = (await response.json()) as Partial<Health>;
+        if (
+          nextHealth.status !== "ok" ||
+          typeof nextHealth.core_host !== "string" ||
+          typeof nextHealth.core_port !== "number"
+        ) {
+          throw new Error("gateway readiness response was invalid");
+        }
+        if (readinessRunRef.current !== run) return;
+
+        setHealth(nextHealth as Health);
+        setBackendReadiness("ready");
+      } catch {
+        if (readinessRunRef.current !== run) return;
+        if (attempt >= READINESS_MAX_ATTEMPTS) {
+          setHealth(null);
+          setBackendReadiness("failed");
+          return;
+        }
+
+        readinessRetryTimerRef.current = window.setTimeout(() => {
+          readinessRetryTimerRef.current = null;
+          void check(attempt + 1);
+        }, READINESS_RETRY_DELAY_MS);
+      } finally {
+        if (readinessRequestTimerRef.current !== null) {
+          window.clearTimeout(readinessRequestTimerRef.current);
+          readinessRequestTimerRef.current = null;
+        }
+        if (readinessAbortRef.current === controller) {
+          readinessAbortRef.current = null;
+        }
+      }
+    };
+
+    void check(1);
   }
 
   async function refreshHealth() {
@@ -664,15 +756,9 @@ export function App() {
   }
 
   useEffect(() => {
-    void refreshHealth();
-    if (initialSession) {
-      void refreshStats(initialSession.token)
-        .then((valid) => {
-          if (valid && tokenRef.current === initialSession.token) connect(initialSession.token);
-        })
-        .catch(() => undefined);
-    }
+    startReadinessCheck();
     return () => {
+      cancelReadinessCheck();
       allowReconnectRef.current = false;
       if (reconnectTimerRef.current !== null) {
         window.clearTimeout(reconnectTimerRef.current);
@@ -682,11 +768,30 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    if (backendReadiness !== "ready" || !initialSession || restoredSessionStartedRef.current) {
+      return;
+    }
+    restoredSessionStartedRef.current = true;
+    void refreshStats(initialSession.token)
+      .then((valid) => {
+        if (valid && tokenRef.current === initialSession.token) connect(initialSession.token);
+      })
+      .catch(() => undefined);
+  }, [backendReadiness]);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ block: "end" });
   }, [messages]);
 
   return (
     <main className="appShell">
+      <span className="srOnly" role="status" aria-live="polite">
+        {backendReadiness === "checking"
+          ? "Checking ChannelWire."
+          : backendReadiness === "ready"
+            ? "ChannelWire is ready."
+            : ""}
+      </span>
       <section className="topbar" aria-label="Connection">
         <div className="brandLockup">
           <img className="brandLogo" src="/channelwire.png" alt="ChannelWire messaging platform logo" />
@@ -695,7 +800,7 @@ export function App() {
             <p>Realtime TCP core through a WebSocket/REST gateway</p>
           </div>
         </div>
-        {token ? (
+        {backendReadiness === "ready" && (token ? (
           <div className="loggedInControls">
             <div className="signedInState">
               <span>Signed in as</span>
@@ -743,10 +848,37 @@ export function App() {
               </button>
             )}
           </div>
-        )}
+        ))}
       </section>
 
-      {token ? (
+      {backendReadiness !== "ready" ? (
+        <section className="readinessState" aria-labelledby="readiness-title">
+          {backendReadiness === "checking" ? (
+            <div className="panel readinessPanel" aria-busy="true">
+              <div className="readinessIcon" aria-hidden="true">
+                <RefreshCw className="readinessSpinner" size={24} />
+              </div>
+              <h2 id="readiness-title">Checking ChannelWire…</h2>
+              <p>Waiting for the gateway to respond. This can take a moment after the service starts.</p>
+              <div className="readinessProgress" role="progressbar" aria-label="Checking gateway readiness">
+                <span />
+              </div>
+            </div>
+          ) : (
+            <div className="panel readinessPanel readinessFailure" role="alert">
+              <div className="readinessIcon" aria-hidden="true">
+                <AlertCircle size={24} />
+              </div>
+              <h2 id="readiness-title">ChannelWire isn’t ready</h2>
+              <p>The gateway did not respond in time. Check that the service is running, then try again.</p>
+              <button type="button" onClick={startReadinessCheck}>
+                <RefreshCw size={17} aria-hidden="true" />
+                Try again
+              </button>
+            </div>
+          )}
+        </section>
+      ) : token ? (
         <section className="workspace">
         <aside className="sidebar" aria-label="Server status">
           <div className="panel">

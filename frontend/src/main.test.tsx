@@ -89,7 +89,7 @@ function installFetchMock() {
 
 async function login() {
   render(<App />);
-  fireEvent.change(screen.getByLabelText("Password"), { target: { value: "correct-horse-battery" } });
+  fireEvent.change(await screen.findByLabelText("Password"), { target: { value: "correct-horse-battery" } });
   fireEvent.click(screen.getByRole("button", { name: "Login" }));
   await screen.findByText("alice");
 }
@@ -210,20 +210,81 @@ describe("logged-out startup", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     window.localStorage.clear();
     vi.unstubAllGlobals();
   });
 
-  it("shows the normal logged-out screen without background network errors", async () => {
-    healthUnavailable = true;
+  it("keeps sign-in unavailable until the real health check succeeds", async () => {
+    let resolveHealth!: (response: Response) => void;
+    const healthResponse = new Promise<Response>((resolve) => {
+      resolveHealth = resolve;
+    });
+    vi.mocked(fetch).mockImplementationOnce(() => healthResponse);
+
     render(<App />);
 
-    expect(screen.getByRole("button", { name: "Login" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Checking ChannelWire.");
+    expect(screen.getByRole("progressbar", { name: "Checking gateway readiness" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Login" })).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveHealth(jsonResponse({ status: "ok", core_host: "127.0.0.1", core_port: 5555 }));
+    });
+
+    expect(await screen.findByRole("button", { name: "Login" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Register" })).toBeInTheDocument();
-    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    expect(screen.getByRole("status")).toHaveTextContent("ChannelWire is ready.");
+  });
+
+  it("uses a bounded failure path and retries the readiness check on demand", async () => {
+    vi.useFakeTimers();
+    const timedOutFetch = vi.mocked(fetch);
+    timedOutFetch.mockImplementation(() => new Promise<Response>(() => undefined));
+    render(<App />);
+
+    expect(screen.getByRole("status")).toHaveTextContent("Checking ChannelWire.");
+    await act(async () => vi.runAllTimersAsync());
+
+    expect(screen.getByRole("alert")).toHaveTextContent("ChannelWire isn’t ready");
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    expect(timedOutFetch).toHaveBeenCalledTimes(6);
     expect(screen.queryByText("Failed to fetch")).not.toBeInTheDocument();
-    expect(screen.queryByText("Unable to reach the server. Please try again.")).not.toBeInTheDocument();
     expect(MockWebSocket.instances).toHaveLength(0);
+
+    let resolveRetry!: (response: Response) => void;
+    const retryResponse = new Promise<Response>((resolve) => {
+      resolveRetry = resolve;
+    });
+    const retryFetch = vi.fn(() => retryResponse);
+    vi.stubGlobal("fetch", retryFetch);
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Checking ChannelWire.");
+    expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveRetry(jsonResponse({ status: "ok", core_host: "127.0.0.1", core_port: 5555 }));
+    });
+
+    expect(screen.getByRole("button", { name: "Login" })).toBeInTheDocument();
+    expect(retryFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("aborts an in-flight readiness request when unmounted", async () => {
+    const requestSignal: { current: AbortSignal | null } = { current: null };
+    vi.mocked(fetch).mockImplementationOnce((_input, init) => {
+      requestSignal.current = init?.signal ?? null;
+      return new Promise<Response>(() => undefined);
+    });
+
+    const { unmount } = render(<App />);
+    await waitFor(() => expect(requestSignal.current).not.toBeNull());
+    expect(requestSignal.current?.aborted).toBe(false);
+
+    unmount();
+
+    expect(requestSignal.current?.aborted).toBe(true);
   });
 
   it("clears an invalid stored session without connecting", async () => {
@@ -245,7 +306,7 @@ describe("logged-out startup", () => {
     expect(screen.queryByText("Failed to fetch")).not.toBeInTheDocument();
   });
 
-  it("clears an expired stored session before making authenticated requests", () => {
+  it("clears an expired stored session before making authenticated requests", async () => {
     const payload = btoa(JSON.stringify({ exp: Math.floor(Date.now() / 1000) - 60 }))
       .replace(/=/g, "")
       .replace(/\+/g, "-")
@@ -257,7 +318,7 @@ describe("logged-out startup", () => {
 
     render(<App />);
 
-    expect(screen.getByRole("button", { name: "Login" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Login" })).toBeInTheDocument();
     expect(window.localStorage.getItem(SESSION_STORAGE_KEY)).toBeNull();
     expect(MockWebSocket.instances).toHaveLength(0);
     expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/stats"))).toBe(false);
@@ -266,7 +327,7 @@ describe("logged-out startup", () => {
   it.each(["Login", "Register"] as const)("shows a friendly error when an active %s cannot reach the backend", async (action) => {
     authUnavailable = true;
     render(<App />);
-    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "correct-horse-battery" } });
+    fireEvent.change(await screen.findByLabelText("Password"), { target: { value: "correct-horse-battery" } });
     fireEvent.click(screen.getByRole("button", { name: action }));
 
     expect(await screen.findByText("Unable to reach the server. Please try again.")).toBeInTheDocument();
@@ -288,6 +349,7 @@ describe("user-friendly errors", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     window.localStorage.clear();
     vi.unstubAllGlobals();
   });
@@ -306,7 +368,7 @@ describe("user-friendly errors", () => {
       422
     );
     render(<App />);
-    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "short" } });
+    fireEvent.change(await screen.findByLabelText("Password"), { target: { value: "short" } });
     fireEvent.click(screen.getByRole("button", { name: "Login" }));
 
     expect(await screen.findByText("Password must be at least 8 characters.")).toBeInTheDocument();
@@ -341,15 +403,16 @@ describe("user-friendly errors", () => {
   });
 
   it("clears a recovered health error without clearing an interaction error", async () => {
-    healthUnavailable = true;
     render(<App />);
-    expect(await screen.findByText("Gateway unavailable. Check that the API is running, then refresh.")).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "correct-horse-battery" } });
+    fireEvent.change(await screen.findByLabelText("Password"), { target: { value: "correct-horse-battery" } });
     fireEvent.click(screen.getByRole("button", { name: "Login" }));
     await screen.findByText("alice");
     const socket = MockWebSocket.instances[0];
     act(() => socket.open());
+
+    healthUnavailable = true;
+    fireEvent.click(screen.getAllByRole("button", { name: "Refresh" })[0]);
+    expect(await screen.findByText("Gateway unavailable. Check that the API is running, then refresh.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Send DM" }));
     expect(screen.getByText("Enter a username.")).toBeInTheDocument();
