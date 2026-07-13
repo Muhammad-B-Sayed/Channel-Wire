@@ -40,6 +40,8 @@ If your existing database is already used by another app, do not change that app
 
 The Render service uses `deploy/render/Dockerfile`, which builds the C server and runs it next to the FastAPI gateway inside one container.
 
+Keep Render's platform health check on `/health`. That endpoint reports gateway liveness and the configured core address without requiring the core to accept a connection. The stricter `/ready` endpoint completes a registration handshake with the messaging core: it returns `200` with the health payload when both services are ready, or `503` with `{"detail":"core unavailable"}` when the core cannot complete the handshake.
+
 ## Vercel frontend
 
 Import this repository into Vercel and use the root `vercel.json`.
@@ -53,9 +55,11 @@ VITE_ENABLE_DEV_TOKEN=0
 
 The Vite build bakes these into the frontend bundle. After changing them, redeploy the frontend.
 
+On startup, the dashboard calls `${VITE_GATEWAY_URL}/ready` and keeps account controls unavailable until both the gateway and messaging core respond. It makes at most six attempts with a three-second timeout and 2.5-second gaps, then shows a **Try again** action. The loading state announces readiness changes to assistive technology and respects reduced-motion preferences.
+
 ## Local Docker
 
-Local Docker Compose still supports Dev Token for demos:
+Local Docker Compose still supports **Dev token** for demos:
 
 ```sh
 CHANNELWIRE_POSTGRES_PUBLISHED_PORT=15432 docker compose up --build
@@ -68,3 +72,4 @@ CHANNELWIRE_POSTGRES_PUBLISHED_PORT=15432 docker compose up --build
 - Keep `CHANNELWIRE_ENABLE_DEV_TOKEN=0`.
 - Use a strong generated `CHANNELWIRE_JWT_SECRET`.
 - Restrict `CHANNELWIRE_CORS_ORIGINS` to the exact production Vercel domain.
+- Verify `/health` for gateway liveness and `/ready` for end-to-end backend readiness after each deployment.
