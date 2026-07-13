@@ -9,6 +9,7 @@ import secrets
 import sys
 import time
 from collections import deque
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -198,13 +199,17 @@ async def core_read(reader: asyncio.StreamReader) -> tuple[int, bytes]:
 
 async def open_registered_core(username: str) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
     reader, writer = await asyncio.open_connection(CORE_HOST, CORE_PORT)
-    await core_send(writer, HELLO, string_payload(username))
-    msg_type, payload = await core_read(reader)
-    if msg_type != OK:
+    try:
+        await core_send(writer, HELLO, string_payload(username))
+        msg_type, payload = await core_read(reader)
+        if msg_type != OK:
+            detail = payload.decode("utf-8", errors="replace")
+            raise HTTPException(status_code=409, detail=detail)
+    except BaseException:
         writer.close()
-        await writer.wait_closed()
-        detail = payload.decode("utf-8", errors="replace")
-        raise HTTPException(status_code=409, detail=detail)
+        with suppress(OSError):
+            await writer.wait_closed()
+        raise
     return reader, writer
 
 
@@ -279,11 +284,30 @@ async def root() -> dict[str, str]:
         "status": "ok",
         "service": "ChannelWire Gateway",
         "health": "/health",
+        "readiness": "/ready",
     }
 
 
 @app.get("/health")
 async def health() -> dict[str, Any]:
+    return {"status": "ok", "core_host": CORE_HOST, "core_port": CORE_PORT}
+
+
+@app.get("/ready")
+async def ready() -> dict[str, Any]:
+    writer: asyncio.StreamWriter | None = None
+    try:
+        async with asyncio.timeout(1):
+            _, writer = await open_registered_core(f"ready-{secrets.token_hex(12)}")
+    except (asyncio.TimeoutError, asyncio.IncompleteReadError, HTTPException, OSError) as exc:
+        raise HTTPException(status_code=503, detail="core unavailable") from exc
+    finally:
+        if writer is not None:
+            with suppress(OSError):
+                await core_send(writer, QUIT)
+            writer.close()
+            with suppress(OSError):
+                await writer.wait_closed()
     return {"status": "ok", "core_host": CORE_HOST, "core_port": CORE_PORT}
 
 

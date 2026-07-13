@@ -64,12 +64,27 @@ def run(server: str) -> None:
             os.environ["CHANNELWIRE_JWT_SECRET"] = "test-secret-with-at-least-32-bytes"
             os.environ["CHANNELWIRE_DATABASE_URL"] = f"sqlite:///{tmpdir}/gateway-test.db"
 
-            from gateway.app.main import app
+            from gateway.app import main as gateway_main
+
+            app = gateway_main.app
 
             with TestClient(app) as client:
                 health = client.get("/health")
                 assert health.status_code == 200
                 assert health.json()["core_port"] == port
+
+                original_core_port = gateway_main.CORE_PORT
+                gateway_main.CORE_PORT = pick_port()
+                try:
+                    unavailable = client.get("/ready")
+                    assert unavailable.status_code == 503
+                    assert unavailable.json() == {"detail": "core unavailable"}
+                finally:
+                    gateway_main.CORE_PORT = original_core_port
+
+                ready = client.get("/ready")
+                assert ready.status_code == 200
+                assert ready.json() == {"status": "ok", "core_host": "127.0.0.1", "core_port": port}
 
                 register_resp = client.post(
                     "/auth/register",

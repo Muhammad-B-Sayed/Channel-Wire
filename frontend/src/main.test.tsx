@@ -61,9 +61,10 @@ function installFetchMock() {
     "fetch",
     vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
-      if (url.endsWith("/health") && healthUnavailable) throw new TypeError("Failed to fetch");
+      if ((url.endsWith("/health") || url.endsWith("/ready")) && healthUnavailable) throw new TypeError("Failed to fetch");
       if (url.includes("/auth/") && authUnavailable) throw new TypeError("Failed to fetch");
       if (url.includes("/auth/")) return authResponse.clone();
+      if (url.endsWith("/ready")) return jsonResponse({ status: "ok", core_host: "127.0.0.1", core_port: 5555 });
       if (url.endsWith("/health")) return jsonResponse({ status: "ok", core_host: "127.0.0.1", core_port: 5555 });
       if (url.includes("/core-stats")) {
         return jsonResponse({
@@ -238,7 +239,7 @@ describe("logged-out startup", () => {
     render(<App />);
 
     expect(screen.getByRole("status")).toHaveTextContent("Checking ChannelWire.");
-    expect(screen.getByRole("progressbar", { name: "Checking gateway readiness" })).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Checking ChannelWire readiness" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Sign in" })).not.toBeInTheDocument();
 
     await act(async () => {
@@ -250,6 +251,31 @@ describe("logged-out startup", () => {
     expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create account" })).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("ChannelWire is ready.");
+  });
+
+  it("stays unavailable while the gateway is up but the messaging core is starting", async () => {
+    let resolveCoreReady!: (response: Response) => void;
+    const coreReadyResponse = new Promise<Response>((resolve) => {
+      resolveCoreReady = resolve;
+    });
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(jsonResponse({ detail: "core unavailable" }, 503))
+      .mockImplementationOnce(() => coreReadyResponse);
+
+    vi.useFakeTimers();
+    render(<App />);
+    await act(async () => vi.advanceTimersByTimeAsync(2_500));
+
+    expect(screen.getByRole("status")).toHaveTextContent("Checking ChannelWire.");
+    expect(screen.queryByRole("button", { name: "Sign in" })).not.toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenNthCalledWith(1, expect.stringMatching(/\/ready$/), expect.any(Object));
+
+    await act(async () => {
+      resolveCoreReady(jsonResponse({ status: "ok", core_host: "127.0.0.1", core_port: 5555 }));
+    });
+
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
   });
 
   it("uses a bounded failure path and retries the readiness check on demand", async () => {

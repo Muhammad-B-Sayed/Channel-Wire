@@ -411,16 +411,16 @@ export function App() {
 
       try {
         const response = await Promise.race<Response>([
-          fetch(`${gatewayHttp}/health`, { cache: "no-store", signal: controller.signal }),
+          fetch(`${gatewayHttp}/ready`, { cache: "no-store", signal: controller.signal }),
           new Promise<Response>((_, reject) => {
             readinessRequestTimerRef.current = window.setTimeout(() => {
               controller.abort();
-              reject(new Error("gateway readiness check timed out"));
+              reject(new Error("backend readiness check timed out"));
             }, READINESS_REQUEST_TIMEOUT_MS);
           })
         ]);
         if (!response.ok) {
-          throw new Error("gateway readiness check failed");
+          throw new Error("backend readiness check failed");
         }
 
         const nextHealth = (await response.json()) as Partial<Health>;
@@ -429,7 +429,7 @@ export function App() {
           typeof nextHealth.core_host !== "string" ||
           typeof nextHealth.core_port !== "number"
         ) {
-          throw new Error("gateway readiness response was invalid");
+          throw new Error("backend readiness response was invalid");
         }
         if (readinessRunRef.current !== run) return;
 
@@ -939,8 +939,8 @@ export function App() {
                 <RefreshCw className="readinessSpinner" size={24} />
               </div>
               <h2 id="readiness-title">Checking ChannelWire…</h2>
-              <p>Waiting for the gateway to respond. This can take a moment after the service starts.</p>
-              <div className="readinessProgress" role="progressbar" aria-label="Checking gateway readiness">
+              <p>Waiting for the gateway and messaging core. This can take a moment after the service starts.</p>
+              <div className="readinessProgress" role="progressbar" aria-label="Checking ChannelWire readiness">
                 <span />
               </div>
             </div>
@@ -950,7 +950,7 @@ export function App() {
                 <AlertCircle size={24} />
               </div>
               <h2 id="readiness-title">ChannelWire isn’t ready</h2>
-              <p>The gateway did not respond in time. Check that the service is running, then try again.</p>
+              <p>ChannelWire did not respond in time. Check that the service is running, then try again.</p>
               <button type="button" onClick={startReadinessCheck}>
                 <RefreshCw size={17} aria-hidden="true" />
                 Try again
