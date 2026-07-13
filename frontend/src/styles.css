@@ -26,6 +26,19 @@
   box-sizing: border-box;
 }
 
+.srOnly {
+  border: 0;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
 body {
   background: var(--bg);
   margin: 0;
@@ -175,6 +188,97 @@ p {
   flex: 1;
   place-items: center;
   padding: 24px;
+}
+
+.readinessState {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  padding: 24px;
+}
+
+.readinessPanel {
+  margin: 0;
+  max-width: 520px;
+  padding: 32px;
+  text-align: center;
+  width: 100%;
+}
+
+.readinessIcon {
+  align-items: center;
+  background: var(--primary-muted);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  color: var(--primary-strong);
+  display: inline-flex;
+  height: 48px;
+  justify-content: center;
+  margin-bottom: 16px;
+  width: 48px;
+}
+
+.readinessPanel h2 {
+  font-size: 20px;
+  margin-bottom: 8px;
+}
+
+.readinessPanel p {
+  color: var(--muted);
+  line-height: 1.55;
+  margin: 0 auto;
+  max-width: 400px;
+}
+
+.readinessPanel button {
+  margin-top: 20px;
+  min-height: 44px;
+}
+
+.readinessFailure .readinessIcon {
+  background: #3a211f;
+  border-color: #653631;
+  color: #ffafa4;
+}
+
+.readinessProgress {
+  background: #111c28;
+  border-radius: 999px;
+  height: 4px;
+  margin: 24px auto 0;
+  max-width: 240px;
+  overflow: hidden;
+}
+
+.readinessProgress span {
+  animation: readiness-progress 1.6s ease-in-out infinite;
+  background: var(--primary-strong);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  transform: translateX(-140%);
+  width: 42%;
+}
+
+.readinessSpinner {
+  animation: readiness-spin 1.1s linear infinite;
+}
+
+@keyframes readiness-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes readiness-progress {
+  50% {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0.45;
+    transform: translateX(340%);
+  }
 }
 
 .loggedOutState .panel {
@@ -622,8 +726,13 @@ dd {
 
 @media (max-width: 560px) {
   .topbar,
-  .workspace {
+  .workspace,
+  .readinessState {
     padding: 12px;
+  }
+
+  .readinessPanel {
+    padding: 24px 20px;
   }
 
   .channelForm {
@@ -642,5 +751,18 @@ dd {
 
   .composer button {
     grid-column: 2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .readinessSpinner,
+  .readinessProgress span {
+    animation: none;
+  }
+
+  .readinessProgress span {
+    opacity: 0.7;
+    transform: none;
+    width: 100%;
   }
 }

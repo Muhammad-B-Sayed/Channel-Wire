@@ -41,13 +41,13 @@ Evidence:
 - PostgreSQL/SQLAlchemy persistence models: `gateway/app/db.py`
 - Alembic schema migrations for users, channels, memberships, and messages: `gateway/alembic/versions/0001_initial_schema.py`
 - Persisted users, channels, memberships, channel messages, and direct messages: `User`, `Channel`, `Membership`, `Message`
-- REST APIs for health, stats, persisted directories, histories, and core stats: `gateway/app/main.py`
+- REST APIs for gateway liveness, core-backed readiness, stats, persisted directories, histories, and core stats: `gateway/app/main.py`
 - WebSocket bridge from JSON commands to C binary frames: `/ws`
 - React + TypeScript dashboard: `frontend/src/main.tsx`
 - Dashboard monitoring: gateway health, core stats, persisted users/channels/memberships/messages, queue disconnects, live users/channels, message-mix meters, queue-pressure meter, and rolling trend charts
-- Dashboard workflow and state handling: automatic connection/channel discovery, active-channel participant refresh, reconnect/rejoin behavior, actionable loading/empty/error states, disabled unavailable actions, and responsive single-column stacking
-- Dashboard interaction coverage for session lifecycle, reconnects, loading/empty states, validation, and gateway errors: `frontend/src/main.test.tsx`
-- Gateway smoke coverage for browser-style channel broadcast and direct messaging: `tests/gateway_smoke_test.py`
+- Dashboard workflow and state handling: bounded core-backed startup readiness with manual retry and accessible status announcements, automatic connection/channel discovery, active-channel participant refresh, reconnect/rejoin behavior, actionable loading/empty/error states, disabled unavailable actions, reduced-motion handling, and responsive single-column stacking
+- Dashboard interaction coverage for startup readiness, bounded failure and retry, request cleanup, session lifecycle, reconnects, loading/empty states, validation, and gateway errors: `frontend/src/main.test.tsx`
+- Gateway smoke coverage for liveness/readiness and browser-style channel broadcast and direct messaging: `tests/gateway_smoke_test.py`
 - Migration coverage for fresh Alembic upgrades and legacy schema adoption: `tests/migration_test.py`
 
 Verification:

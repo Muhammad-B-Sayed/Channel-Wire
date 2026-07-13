@@ -19,7 +19,7 @@ The goal is to show systems-level networking and full-stack deployment in one pr
 ChannelWire is more than a chat UI. It demonstrates how to connect low-level network programming to a deployable web application:
 
 - **Systems programming:** custom socket server, binary framing, non-blocking reads/writes, connection lifecycle management, and backpressure handling.
-- **Backend engineering:** authenticated REST/WebSocket gateway, database persistence, migrations, production environment variables, and health checks.
+- **Backend engineering:** authenticated REST/WebSocket gateway, database persistence, migrations, production environment variables, and separate liveness/readiness checks.
 - **Frontend engineering:** real-time dashboard, dark UI, slash commands, bounded message rendering, and monitoring panels.
 - **Production workflow:** Docker Compose, GitHub Actions CI, sanitizer-enabled C builds, integration tests, load tests, Render backend config, and Vercel frontend config.
 
@@ -41,7 +41,7 @@ ChannelWire is more than a chat UI. It demonstrates how to connect low-level net
 Example browser workflow:
 
 ```text
-Register/Login -> Automatic gateway connection -> Browse channels -> Join #general -> Send messages -> Monitor stats
+Startup readiness check -> Create account/Sign in -> Automatic gateway connection -> Browse channels -> Join #general -> Send messages -> Monitor stats
 ```
 
 Example CLI session against the TCP core:
@@ -54,11 +54,13 @@ bob #general> hey alice
 alice> /dm bob private hello
 ```
 
-Example health response from the deployed gateway:
+Example successful liveness or readiness response from the deployed gateway:
 
 ```json
 {"status":"ok","core_host":"127.0.0.1","core_port":5555}
 ```
+
+`GET /health` reports that the gateway is running and identifies its configured core address. `GET /ready` returns the same success payload only after the gateway completes a registration handshake with the messaging core; it returns `503` while the core is unavailable.
 
 ## Architecture
 
@@ -119,6 +121,7 @@ Open:
 Dashboard: http://127.0.0.1:3000
 Gateway:   http://127.0.0.1:8000
 Health:    http://127.0.0.1:8000/health
+Readiness: http://127.0.0.1:8000/ready
 Core TCP:  127.0.0.1:5555
 Postgres:  127.0.0.1:15432 or 127.0.0.1:5432
 ```
@@ -139,14 +142,17 @@ docker compose down -v
 
 The dashboard is the main app UI. Locally it is available at `http://127.0.0.1:3000`.
 
-1. Register a username and password, log in, or use Dev Token in local/demo mode.
-2. The dashboard stores the JWT until it expires or you log out, then connects to the WebSocket gateway automatically.
-3. Browse the automatically loaded live-channel list and join a channel; the participant list refreshes for the active channel.
-4. Send channel or direct messages, inspect history, and monitor server stats. If the realtime connection drops, the dashboard reconnects and rejoins the active channel automatically.
+1. Wait for the startup check to confirm that both the gateway and messaging core are ready.
+2. Create an account and sign in, or use **Dev token** in local/demo mode.
+3. The dashboard stores the JWT until it expires or you sign out, then connects to the WebSocket gateway automatically.
+4. Browse the automatically loaded live-channel list and join a channel; the participant list refreshes for the active channel.
+5. Send channel or direct messages, inspect history, and monitor server stats. If the real-time connection drops, the dashboard reconnects and rejoins the active channel automatically.
 
-Loading, empty, disconnected, and gateway-error states include next-step guidance, and controls that need a live connection or active channel remain disabled until they can be used. The three-column console stacks into a single-column layout on narrower screens so the status, messaging, and direct-message panels remain accessible.
+The dashboard keeps account and messaging controls unavailable until `GET /ready` confirms the gateway-to-core handshake. It makes at most six attempts, gives each request three seconds, waits 2.5 seconds between attempts, and then offers **Try again**. Readiness changes are announced to assistive technology, and the progress animation becomes static when reduced motion is requested.
 
-Production disables Dev Token by default with:
+Loading, empty, disconnected, and error states include next-step guidance, and controls that need a live connection or active channel remain disabled until they can be used. The three-column console stacks into a single-column layout on narrower screens so the status, messages, and direct-message panels remain accessible.
+
+Production disables **Dev token** by default with:
 
 ```text
 CHANNELWIRE_ENABLE_DEV_TOKEN=0
@@ -169,7 +175,7 @@ Supported chat slash commands:
 /quit
 ```
 
-The visible message list is capped to the latest 80 entries so the page does not grow forever. Older visible entries drop off as new events arrive. Persisted message history is still available through the History button and REST history endpoints.
+The visible message list is capped to the latest 80 entries so the page does not grow forever. Older visible entries drop off as new events arrive. Persisted message history is still available through the **Load history** buttons and REST history endpoints.
 
 ## Running Pieces Manually
 
@@ -210,7 +216,7 @@ The frontend defaults to `http://127.0.0.1:8000`. Use `VITE_GATEWAY_URL` if the 
 
 ## Authentication
 
-Register:
+Create an account:
 
 ```sh
 curl -X POST http://127.0.0.1:8000/auth/register \
@@ -218,7 +224,7 @@ curl -X POST http://127.0.0.1:8000/auth/register \
   -d '{"username":"alice","password":"correct-horse-battery"}'
 ```
 
-Log in:
+Sign in:
 
 ```sh
 curl -X POST http://127.0.0.1:8000/auth/login \
@@ -226,7 +232,7 @@ curl -X POST http://127.0.0.1:8000/auth/login \
   -d '{"username":"alice","password":"correct-horse-battery"}'
 ```
 
-Local/demo Dev Token:
+Local/demo **Dev token**:
 
 ```sh
 curl -X POST http://127.0.0.1:8000/auth/dev-token \
@@ -261,9 +267,12 @@ Example WebSocket commands:
 Useful unauthenticated endpoints:
 
 ```text
-GET /          gateway status
-GET /health   health check
+GET /          gateway status and probe links
+GET /health   gateway liveness and configured core address
+GET /ready    gateway and messaging-core readiness
 ```
+
+`GET /ready` allows one second for a TCP registration handshake with the core. It returns `200` with the health payload when the handshake succeeds, or `503` with `{"detail":"core unavailable"}` when the core cannot complete it.
 
 Authenticated endpoints:
 
@@ -415,6 +424,7 @@ After deploy, these should work:
 ```text
 https://your-render-service.onrender.com/
 https://your-render-service.onrender.com/health
+https://your-render-service.onrender.com/ready
 ```
 
 Expected `/health` response:
@@ -422,6 +432,14 @@ Expected `/health` response:
 ```json
 {"status":"ok","core_host":"127.0.0.1","core_port":5555}
 ```
+
+Expected `/ready` response after the messaging core starts:
+
+```json
+{"status":"ok","core_host":"127.0.0.1","core_port":5555}
+```
+
+If the core is not ready, `/health` still returns `200` while `/ready` returns `503` with `{"detail":"core unavailable"}`. Keep Render's platform health check on `/health`; the dashboard uses `/ready` for its stricter startup gate.
 
 Render logs should show Python/FastAPI/Uvicorn behavior. If logs show only:
 
@@ -471,7 +489,7 @@ After changing Vercel environment variables, redeploy Vercel. If builds behave s
 
 ### CORS
 
-If the browser says `Failed to fetch` but `https://your-render-service.onrender.com/health` works directly, it is usually CORS.
+If the frontend cannot reach ChannelWire but both `/health` and `/ready` work directly, it is usually CORS.
 
 For production only:
 
@@ -538,11 +556,11 @@ What they cover:
 | `make test-lifecycle` | duplicate usernames, joins/switches/leaves, renames, quit behavior |
 | `make test-backpressure` | slow-reader disconnects and continued service for other clients |
 | `make test-malformed` | invalid usernames, truncated strings, unknown types, oversized frames |
-| `make test-gateway` | FastAPI auth/stats/history/WebSocket smoke path with the C core |
+| `make test-gateway` | FastAPI liveness/readiness, auth/stats/history, and WebSocket smoke path with the C core |
 | `make test-migrations` | fresh Alembic upgrade and legacy schema adoption |
 | `make test-compose` | full Docker Compose stack smoke test |
 | `make sanitize` | sanitizer-enabled C build |
-| `npm --prefix frontend test` | dashboard session, reconnect, loading/empty-state, validation, and error behavior |
+| `npm --prefix frontend test` | dashboard startup readiness/retry, session, reconnect, loading/empty-state, validation, and error behavior |
 
 GitHub Actions runs CI from `.github/workflows/ci.yml`.
 
@@ -570,7 +588,7 @@ Also make sure Render is deploying the branch and commit that contain the curren
 
 ### Render root URL shows `{"detail":"Not Found"}`
 
-That means an older backend commit is deployed. Current versions include `GET /`, which returns gateway status. `GET /health` is the important health check either way.
+That means an older backend commit is deployed. Current versions include `GET /`, which returns gateway status and links to both probes. Render uses `GET /health` for liveness, while the current dashboard requires `GET /ready` to verify the messaging core before showing account controls.
 
 ### Vercel build looks for `frontend/frontend/package.json`
 
@@ -582,7 +600,7 @@ Build Command: npm run build
 Output Directory: dist
 ```
 
-### Frontend says `Failed to fetch`
+### Frontend says `ChannelWire isn’t ready`
 
 Check:
 
@@ -594,7 +612,9 @@ CHANNELWIRE_CORS_ORIGIN_REGEX=https://.*\.vercel\.app
 
 Redeploy both services after environment variable changes.
 
-### Dev Token does not show in production
+Open `/health` and `/ready` on the Render service directly. If `/health` succeeds but `/ready` returns `503`, inspect the backend logs because the messaging core is unavailable. If both probes succeed directly, check the frontend gateway URL and CORS settings.
+
+### Dev token does not show in production
 
 That is expected. Production should use:
 
@@ -603,7 +623,7 @@ CHANNELWIRE_ENABLE_DEV_TOKEN=0
 VITE_ENABLE_DEV_TOKEN=0
 ```
 
-Use Register/Login in production.
+Use **Create account** or **Sign in** in production.
 
 ## Requirement Evidence
 
