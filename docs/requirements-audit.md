@@ -45,6 +45,8 @@ Evidence:
 - WebSocket bridge from JSON commands to C binary frames: `/ws`
 - React + TypeScript dashboard: `frontend/src/main.tsx`
 - Dashboard monitoring: gateway health, core stats, persisted users/channels/memberships/messages, queue disconnects, live users/channels, message-mix meters, queue-pressure meter, and rolling trend charts
+- Dashboard workflow and state handling: automatic connection/channel discovery, active-channel participant refresh, reconnect/rejoin behavior, actionable loading/empty/error states, disabled unavailable actions, and responsive single-column stacking
+- Dashboard interaction coverage for session lifecycle, reconnects, loading/empty states, validation, and gateway errors: `frontend/src/main.test.tsx`
 - Gateway smoke coverage for browser-style channel broadcast and direct messaging: `tests/gateway_smoke_test.py`
 - Migration coverage for fresh Alembic upgrades and legacy schema adoption: `tests/migration_test.py`
 
@@ -55,6 +57,7 @@ python3 -m pip install -r gateway/requirements.txt
 make test-gateway
 make test-migrations
 make migrate-db
+npm --prefix frontend test
 npm --prefix frontend run build
 npm --prefix frontend audit --audit-level=high
 ```
@@ -74,7 +77,7 @@ Evidence:
 - Shared Render Postgres isolation through `CHANNELWIRE_DB_SCHEMA=channelwire`
 - GitHub Actions CI: `.github/workflows/ci.yml`
 - Sanitizer-enabled C builds: `make SANITIZE=1 ...`
-- Automated integration/load/lifecycle/backpressure/malformed/gateway/frontend tests: `tests/`, `Makefile`
+- Automated integration/load/lifecycle/backpressure/malformed/gateway/frontend tests: `tests/`, `frontend/src/main.test.tsx`, `Makefile`, `frontend/package.json`
 - Load-test benchmark artifact: `docs/benchmarks/latest-load.json`
 - Repeated-round soak-test artifact: `docs/benchmarks/latest-soak.json`
 - Compose runtime smoke test with direct PostgreSQL schema/Alembic checks: `tests/compose_smoke_test.py`
